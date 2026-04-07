@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Settings — Waqar &amp; Brothers{% endblock %}
+
+{% block content %}
+<div class="form-box">
+    <h1>Settings</h1>
+
+    <form method="POST" action="{{ url_for('settings') }}">
+        <div class="form-group">
+            <label for="business_name">Business Name:</label>
+            <input type="text" id="business_name" name="business_name"
+                   value="{{ business_name }}" required autofocus>
+        </div>
+
+        <div class="form-group">
+            <label for="opening_balance">Opening Balance (PKR):</label>
+            <input type="number" id="opening_balance" name="opening_balance"
+                   value="{{ opening_balance }}" required min="0" step="1">
+            <p class="hint">This is the starting cash balance when you first
+               began using the app. It only affects the very first day.</p>
+        </div>
+
+        <div class="form-actions">
+            <a href="{{ url_for('daily') }}" class="btn btn-cancel">Cancel</a>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+    </form>
+
+    <hr class="settings-divider">
+
+    <div class="settings-extra">
+        <h2>Account</h2>
+        <p><a href="{{ url_for('change_password') }}">Change Password</a></p>
+    </div>
+
+    <div class="settings-extra">
+        <h2>Data Backup</h2>
+        <p class="hint" style="margin-bottom: 12px;">Click to create a backup of your database. Store it safely.</p>
+        <a href="{{ url_for('backup') }}" class="btn btn-recovery">Backup Now</a>
+    </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-extra">
+        <h2>About</h2>
+        <p>Waqar &amp; Brothers — Daily Account Book</p>
+        <p>Version: 1.0 (Phase 1)</p>
+    </div>
+</div>
+{% endblock %}

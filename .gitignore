@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+accounts.db
+backups/
+uploads/
+dist/
+build/
+.env

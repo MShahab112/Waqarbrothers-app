@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Login — Waqar &amp; Brothers{% endblock %}
+
+{% block content %}
+<div class="login-box">
+    <h1>WAQAR &amp; BROTHERS</h1>
+    <h2>Daily Account Book</h2>
+
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required
+                   autofocus autocomplete="username">
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required
+                   autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full">Login</button>
+    </form>
+
+    <p class="login-warning">After 5 wrong attempts, the account will be
+       locked for 15 minutes.</p>
+</div>
+{% endblock %}

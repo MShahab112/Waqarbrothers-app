@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — {{ business_name }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <div class="page-title">{{ business_name }} <span class="accent">Dashboard</span></div>
+        <div class="page-subtitle">Financial overview across all time</div>
+    </div>
+    {% if monthly_data %}
+    <div style="display: flex; gap: 8px;">
+        <a href="{{ url_for('export_pdf') }}" class="btn btn-ghost">Export PDF</a>
+        <a href="{{ url_for('export_excel') }}" class="btn btn-ghost">Export Excel</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Summary Cards -->
+<div class="dashboard-grid">
+    <div class="card dashboard-stat">
+        <div class="stat-label">Total Income</div>
+        <div class="stat-value mono recovery">{{ total_income|pkr }}</div>
+    </div>
+    <div class="card dashboard-stat">
+        <div class="stat-label">Total Expenses</div>
+        <div class="stat-value mono expense">{{ total_expense|pkr }}</div>
+    </div>
+    <div class="card dashboard-stat">
+        <div class="stat-label">Net Profit</div>
+        <div class="stat-value mono {% if net_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ net_profit|pkr }}</div>
+    </div>
+</div>
+
+<!-- Best / Worst Month -->
+{% if best_month and worst_month %}
+<div class="dashboard-grid" style="margin-top: 20px;">
+    <div class="card dashboard-stat">
+        <div class="stat-label">Best Month</div>
+        <div class="stat-month">{{ best_month.label }}</div>
+        <div class="stat-value mono recovery" style="font-size: 18px;">{{ best_month.profit|pkr }}</div>
+    </div>
+    <div class="card dashboard-stat">
+        <div class="stat-label">Worst Month</div>
+        <div class="stat-month">{{ worst_month.label }}</div>
+        <div class="stat-value mono {% if worst_month.profit >= 0 %}recovery{% else %}negative{% endif %}" style="font-size: 18px;">{{ worst_month.profit|pkr }}</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Monthly Trends Chart -->
+{% if monthly_data|length > 1 %}
+<div class="card" style="margin-top: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">Monthly Trends</div>
+    </div>
+    <div style="padding: 12px 18px;">
+        <canvas id="monthlyChart" height="280"></canvas>
+    </div>
+</div>
+{% endif %}
+
+<!-- Charts Row: Expenses by Category (list + pie) -->
+{% if category_totals %}
+<div class="dashboard-grid" style="margin-top: 24px;">
+    <div class="card dashboard-stat" style="padding: 20px;">
+        <div class="section-header" style="border-top: none; padding-top: 0;">
+            <div class="section-title">Expenses by Category</div>
+        </div>
+        {% for cat in category_totals %}
+        <div class="summary-row">
+            <span class="summary-label">{{ cat.name }}</span>
+            <span class="summary-amount mono expense">{{ cat.amount|pkr }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="card dashboard-stat" style="padding: 20px;">
+        <div class="section-header" style="border-top: none; padding-top: 0;">
+            <div class="section-title">Expense Distribution</div>
+        </div>
+        <div style="padding: 12px 0; max-width: 320px; margin: 0 auto;">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Monthly Breakdown -->
+<div class="card" style="margin-top: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">Monthly Breakdown</div>
+    </div>
+
+    {% if monthly_data %}
+    <!-- Column Headers -->
+    <div class="entry-row" style="border: none; background: none; padding: 8px 18px; margin-bottom: 0;">
+        <div class="monthly-col-label" style="flex: 1;">Month</div>
+        <div class="monthly-col-label">Income</div>
+        <div class="monthly-col-label">Expense</div>
+        <div class="monthly-col-label">Profit</div>
+    </div>
+
+        {% for item in monthly_data %}
+        <div class="entry-row">
+            <div class="monthly-month" style="flex: 1;">
+                <a href="{{ url_for('daily', month=item.month, year=item.year) }}" class="monthly-link">{{ item.label }}</a>
+            </div>
+            <div class="entry-amount recovery mono">{{ item.income|pkr }}</div>
+            <div class="entry-amount expense mono">{{ item.expense|pkr }}</div>
+            <div class="entry-amount mono {% if item.profit >= 0 %}recovery{% else %}negative{% endif %}">{{ item.profit|pkr }}</div>
+        </div>
+        {% endfor %}
+
+    <!-- Monthly Totals Row -->
+    <div class="section-total" style="margin-top: 16px;">
+        <span>All Time Total</span>
+        <span class="amount mono {% if net_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ net_profit|pkr }}</span>
+    </div>
+    {% else %}
+    <div class="empty-msg">No entries recorded yet. Add transactions on the Daily Page to see your dashboard.</div>
+    {% endif %}
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Shared chart defaults for dark/light theme
+var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text1').trim() || '#fff';
+var gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#333';
+
+Chart.defaults.color = textColor;
+Chart.defaults.borderColor = gridColor;
+
+{% if monthly_data|length > 1 %}
+// --- Monthly Trends Line Chart ---
+(function() {
+    var labels = [{% for item in monthly_data %}'{{ item.label }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    var incomeData = [{% for item in monthly_data %}{{ item.income }}{% if not loop.last %}, {% endif %}{% endfor %}];
+    var expenseData = [{% for item in monthly_data %}{{ item.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    var ctx = document.getElementById('monthlyChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Income',
+                    data: incomeData,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#22c55e'
+                },
+                {
+                    label: 'Expenses',
+                    data: expenseData,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#ef4444'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(c) {
+                            return c.dataset.label + ': PKR ' + c.parsed.y.toLocaleString('en-IN');
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(v) { return 'PKR ' + v.toLocaleString('en-IN'); }
+                    }
+                }
+            }
+        }
+    });
+})();
+{% endif %}
+
+{% if category_totals %}
+// --- Category Pie Chart ---
+(function() {
+    var catLabels = [{% for cat in category_totals %}'{{ cat.name }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    var catData = [{% for cat in category_totals %}{{ cat.amount }}{% if not loop.last %}, {% endif %}{% endfor %}];
+    var catColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+    var ctx2 = document.getElementById('categoryChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'pie',
+        data: {
+            labels: catLabels,
+            datasets: [{
+                data: catData,
+                backgroundColor: catColors.slice(0, catLabels.length),
+                borderWidth: 2,
+                borderColor: getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || '#1a1a2e'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 16 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(c) {
+                            var total = c.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                            var pct = ((c.parsed / total) * 100).toFixed(1);
+                            return c.label + ': PKR ' + c.parsed.toLocaleString('en-IN') + ' (' + pct + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+{% endif %}
+</script>
+{% endblock %}

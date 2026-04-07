@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% block title %}Daily Page — {{ display_date }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <div class="page-title">{{ business_name }} <span class="accent">Daily</span></div>
+        <div class="page-subtitle">Manage your daily transactions</div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+        {% if view_mode == 'monthly' %}
+        <a href="{{ url_for('export_pdf', month=selected_month, year=selected_year) }}" class="btn btn-ghost">Export PDF</a>
+        <a href="{{ url_for('export_excel', month=selected_month, year=selected_year) }}" class="btn btn-ghost">Export Excel</a>
+        {% else %}
+        <a href="{{ url_for('export_pdf', date=page_date) }}" class="btn btn-ghost">Export PDF</a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Month Filter Bar -->
+<div class="month-bar">
+    {% set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+    {% for m in range(1, 13) %}
+    <a href="{{ url_for('daily', month=m, year=selected_year) }}"
+       class="month-btn {% if view_mode == 'monthly' and selected_month == m %}active{% endif %}">
+        {{ months[m-1] }}
+    </a>
+    {% endfor %}
+</div>
+
+<!-- Date / Month Navigation -->
+<div class="date-nav">
+    {% if view_mode == 'monthly' %}
+    <a href="{{ url_for('daily', month=prev_month, year=prev_year) }}" class="btn btn-nav">&laquo; Prev Month</a>
+    <div class="date-display">{{ display_date }}</div>
+    <a href="{{ url_for('daily', month=next_month, year=next_year) }}" class="btn btn-nav">Next Month &raquo;</a>
+    <a href="{{ url_for('daily', date=current_date) }}" class="btn btn-nav">Today</a>
+    {% else %}
+    <a href="{{ url_for('daily', date=prev_date) }}" class="btn btn-nav">&laquo; Yesterday</a>
+    <div class="date-display">
+        {{ display_date }}
+        <input type="date" id="datePicker" value="{{ page_date }}" class="date-picker-input">
+    </div>
+    <a href="{{ url_for('daily', date=next_date) }}" class="btn btn-nav">Tomorrow &raquo;</a>
+    <a href="{{ url_for('daily', date=current_date) }}" class="btn btn-nav">Today</a>
+    {% endif %}
+</div>
+
+<!-- Search & Filter Bar -->
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('daily') }}" class="filter-form">
+        {% if view_mode == 'monthly' %}
+        <input type="hidden" name="month" value="{{ selected_month }}">
+        <input type="hidden" name="year" value="{{ selected_year }}">
+        {% else %}
+        <input type="hidden" name="date" value="{{ page_date }}">
+        {% endif %}
+        <input type="text" name="search" value="{{ search }}" placeholder="Search by name or description..." class="filter-input">
+        <select name="payment_type" class="filter-select">
+            <option value="all" {% if filter_payment == 'all' %}selected{% endif %}>All Types</option>
+            <option value="cash" {% if filter_payment == 'cash' %}selected{% endif %}>Cash</option>
+            <option value="online" {% if filter_payment == 'online' %}selected{% endif %}>Online</option>
+        </select>
+        <select name="category" class="filter-select">
+            <option value="all" {% if category_filter == 'all' %}selected{% endif %}>All Categories</option>
+            <option value="food" {% if category_filter == 'food' %}selected{% endif %}>Food / Tea</option>
+            <option value="transport" {% if category_filter == 'transport' %}selected{% endif %}>Transport</option>
+            <option value="bank" {% if category_filter == 'bank' %}selected{% endif %}>Bank Slip</option>
+            <option value="utility" {% if category_filter == 'utility' %}selected{% endif %}>Utility Bill</option>
+            <option value="zakat" {% if category_filter == 'zakat' %}selected{% endif %}>Zakat / Charity</option>
+            <option value="other" {% if category_filter == 'other' %}selected{% endif %}>Other</option>
+        </select>
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px;">Search</button>
+        {% if search or filter_payment != 'all' or category_filter != 'all' %}
+        <a href="{{ url_for('daily', month=selected_month if view_mode == 'monthly' else None, year=selected_year if view_mode == 'monthly' else None, date=page_date if view_mode == 'daily' else None) }}" class="btn btn-ghost" style="padding: 8px 16px;">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Opening Balance -->
+<div class="balance-bar">
+    <div class="balance-label">Opening Balance</div>
+    <div class="balance-amount mono">{{ opening_balance|pkr }}</div>
+</div>
+
+<!-- RECOVERY Section -->
+<div class="card" style="margin-bottom: 20px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">Recovery</div>
+        <button class="btn btn-recovery" onclick="openModal('recoveryModal')">+ Add Recovery</button>
+    </div>
+
+    {% if recoveries %}
+        {% for entry in recoveries %}
+        <div class="entry-row">
+            {% if view_mode == 'monthly' %}
+            <div class="entry-date">{{ entry['date']|monthday }}</div>
+            {% endif %}
+            <div class="entry-dot recovery"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">{{ entry['description'] }}</div>
+                <div class="entry-notes">{{ entry['notes'] or '' }}</div>
+            </div>
+            <div class="entry-amount recovery mono">{{ entry['amount']|pkr }}</div>
+            <div class="entry-actions">
+                <a href="{{ url_for('edit_entry', entry_id=entry['id']) }}"
+                   class="btn btn-sm btn-ghost">Edit</a>
+                <form method="POST"
+                      action="{{ url_for('delete_entry', entry_id=entry['id']) }}"
+                      style="display:inline"
+                      onsubmit="return confirm('Delete this entry?')">
+                    <button type="submit" class="btn btn-sm btn-danger">Del</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-msg">No recovery entries yet. Click + Add Recovery to get started.</div>
+    {% endif %}
+
+    <div class="section-total">
+        <span>Total Recovery</span>
+        <span class="amount mono recovery">{{ total_recovery|pkr }}</span>
+    </div>
+</div>
+
+<!-- EXPENSES Section -->
+<div class="card" style="margin-bottom: 20px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">Expenses</div>
+        <button class="btn btn-expense" onclick="openModal('expenseModal')">+ Add Expense</button>
+    </div>
+
+    {% if expenses %}
+        {% for entry in expenses %}
+        <div class="entry-row">
+            {% if view_mode == 'monthly' %}
+            <div class="entry-date">{{ entry['date']|monthday }}</div>
+            {% endif %}
+            <div class="entry-dot expense"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">{{ entry['description'] }}</div>
+                {% if entry['category'] and entry['category'] != 'other' %}
+                <div class="entry-category">{{ entry['category']|capitalize }}</div>
+                {% endif %}
+                <div class="entry-notes">{{ entry['notes'] or '' }}</div>
+            </div>
+            <div class="entry-amount expense mono">{{ entry['amount']|pkr }}</div>
+            <div class="entry-actions">
+                {% if entry['receipt'] %}
+                <button type="button" class="btn btn-sm btn-ghost"
+                        onclick="openReceiptModal('{{ url_for('uploaded_file', filename=entry['receipt']) }}')">Receipt</button>
+                {% endif %}
+                <a href="{{ url_for('edit_entry', entry_id=entry['id']) }}"
+                   class="btn btn-sm btn-ghost">Edit</a>
+                <form method="POST"
+                      action="{{ url_for('delete_entry', entry_id=entry['id']) }}"
+                      style="display:inline"
+                      onsubmit="return confirm('Delete this entry?')">
+                    <button type="submit" class="btn btn-sm btn-danger">Del</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-msg">No expense entries yet. Click + Add Expense to get started.</div>
+    {% endif %}
+
+    <div class="section-total">
+        <span>Total Expenses</span>
+        <span class="amount mono expense">{{ total_expenses|pkr }}</span>
+    </div>
+</div>
+
+<!-- DAILY SUMMARY -->
+<div class="card">
+    <h2 style="font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Daily Summary</h2>
+    <div class="summary-row">
+        <span class="summary-label">Opening Balance</span>
+        <span class="summary-amount mono">{{ opening_balance|pkr }}</span>
+    </div>
+    <div class="summary-row">
+        <span class="summary-label"><span class="operator">+</span> Total Recovery</span>
+        <span class="summary-amount mono recovery">{{ total_recovery|pkr }}</span>
+    </div>
+    <div class="summary-row">
+        <span class="summary-label"><span class="operator">&minus;</span> Total Expenses</span>
+        <span class="summary-amount mono expense">{{ total_expenses|pkr }}</span>
+    </div>
+    <div class="summary-row closing">
+        <span class="summary-label">= Closing Balance</span>
+        <span class="summary-amount mono {% if closing_balance < 0 %}negative{% endif %}">{{ closing_balance|pkr }}</span>
+    </div>
+</div>
+
+<!-- RECOVERY MODAL -->
+<div id="recoveryModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">Add Recovery Entry</div>
+            <button onclick="closeModal('recoveryModal')" class="modal-close">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_entry') }}">
+            <input type="hidden" name="type" value="recovery">
+            <div class="form-group">
+                <label for="recovery_date">Date</label>
+                <input type="date" id="recovery_date" name="date" value="{{ page_date }}" required>
+            </div>
+            <div class="form-group">
+                <label for="recovery_description">Salesman Name</label>
+                <input type="text" id="recovery_description" name="description" required
+                       placeholder="e.g. Khalid">
+            </div>
+            <div class="form-group">
+                <label for="recovery_amount">Amount (PKR)</label>
+                <input type="number" id="recovery_amount" name="amount" required
+                       min="1" step="1" placeholder="e.g. 150000" class="amount-input">
+            </div>
+            <div class="form-group">
+                <label for="recovery_notes">Notes (optional)</label>
+                <input type="text" id="recovery_notes" name="notes"
+                       placeholder="Any extra details">
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeModal('recoveryModal')" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- EXPENSE MODAL -->
+<div id="expenseModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">Add Expense Entry</div>
+            <button onclick="closeModal('expenseModal')" class="modal-close">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_entry') }}" enctype="multipart/form-data">
+            <input type="hidden" name="type" value="expense">
+            <div class="form-group">
+                <label for="expense_date">Date</label>
+                <input type="date" id="expense_date" name="date" value="{{ page_date }}" required>
+            </div>
+            <div class="form-group">
+                <label for="expense_description">Description</label>
+                <input type="text" id="expense_description" name="description" required
+                       placeholder="e.g. Food / Tea">
+            </div>
+            <div class="form-group">
+                <label for="expense_payment_type">Payment Type</label>
+                <select name="payment_type" id="expense_payment_type" onchange="toggleReceiptField()">
+                    <option value="cash">Cash</option>
+                    <option value="online">Online</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="expense_category">Category</label>
+                <select name="category" id="expense_category">
+                    <option value="food">Food / Tea</option>
+                    <option value="transport">Transport</option>
+                    <option value="bank">Bank Slip</option>
+                    <option value="utility">Utility Bill</option>
+                    <option value="zakat">Zakat / Charity</option>
+                    <option value="other" selected>Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="expense_amount" id="expense_amount_label">Amount (PKR)</label>
+                <input type="number" id="expense_amount" name="amount" required
+                       min="1" step="1" placeholder="e.g. 5000" class="amount-input">
+            </div>
+            <div class="form-group" id="receipt-field" style="display:none;">
+                <label for="expense_receipt">Upload Transaction Screenshot</label>
+                <input type="file" id="expense_receipt" name="receipt" accept="image/*">
+            </div>
+            <div class="form-group">
+                <label for="expense_notes">Notes (optional)</label>
+                <input type="text" id="expense_notes" name="notes"
+                       placeholder="Any extra details">
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeModal('expenseModal')" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- RECEIPT PREVIEW MODAL -->
+<div id="receiptModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:600px; padding:16px;">
+        <div class="modal-header" style="margin-bottom:12px;">
+            <div class="modal-title">Receipt</div>
+            <button onclick="closeReceiptModal()" class="modal-close">&times;</button>
+        </div>
+        <img id="receiptImage" src="" style="width:100%; border-radius:10px; display:block;">
+    </div>
+</div>
+
+<script>
+// Receipt preview modal
+function openReceiptModal(src) {
+    document.getElementById('receiptImage').src = src;
+    document.getElementById('receiptModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeReceiptModal() {
+    document.getElementById('receiptModal').style.display = 'none';
+    document.getElementById('receiptImage').src = '';
+    document.body.style.overflow = 'auto';
+}
+
+document.getElementById('receiptModal').addEventListener('click', function(e) {
+    if (e.target === this) closeReceiptModal();
+});
+
+// Focus targets for each modal
+var modalFocus = {
+    recoveryModal: 'recovery_description',
+    expenseModal: 'expense_description'
+};
+
+function openModal(id) {
+    var modal = document.getElementById(id);
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    // Auto-focus the description field after a brief delay for animation
+    var focusId = modalFocus[id];
+    if (focusId) {
+        setTimeout(function() {
+            document.getElementById(focusId).focus();
+        }, 100);
+    }
+}
+
+function closeModal(id) {
+    var modal = document.getElementById(id);
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    // Reset form fields
+    var form = modal.querySelector('form');
+    if (form) form.reset();
+    // Restore hidden date value after reset
+    var dateInput = modal.querySelector('input[name="date"]');
+    if (dateInput) dateInput.value = '{{ page_date }}';
+    // Reset expense-specific fields
+    if (id === 'expenseModal') {
+        document.getElementById('receipt-field').style.display = 'none';
+        document.getElementById('expense_amount_label').textContent = 'Amount (PKR)';
+    }
+}
+
+// Close modal when clicking outside the card
+document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            closeModal(overlay.id);
+        }
+    });
+});
+
+// Close modal on ESC key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        // Close receipt modal if open
+        var receiptModal = document.getElementById('receiptModal');
+        if (receiptModal && receiptModal.style.display === 'flex') {
+            closeReceiptModal();
+            return;
+        }
+        document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+            if (overlay.style.display === 'flex') {
+                closeModal(overlay.id);
+            }
+        });
+    }
+});
+
+// Toggle receipt field and amount label based on payment type
+function toggleReceiptField() {
+    var paymentType = document.getElementById('expense_payment_type').value;
+    var receiptField = document.getElementById('receipt-field');
+    var amountLabel = document.getElementById('expense_amount_label');
+
+    if (paymentType === 'online') {
+        receiptField.style.display = 'block';
+        amountLabel.textContent = 'Transaction Amount (confirm from slip)';
+    } else {
+        receiptField.style.display = 'none';
+        amountLabel.textContent = 'Amount (PKR)';
+    }
+}
+
+// Date picker — auto-navigate on change
+var datePicker = document.getElementById('datePicker');
+if (datePicker) {
+    datePicker.addEventListener('change', function() {
+        if (this.value) {
+            window.location.href = '{{ url_for("daily") }}?date=' + this.value;
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Waqar &amp; Brothers{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% if session.get('user_id') %}
+    <!-- Navigation bar — shown on every page when logged in -->
+    <nav class="navbar">
+        <div class="brand">
+            <div class="logo">WB</div>
+            <div class="brand-text">{{ business_name }}</div>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('daily') }}">Daily Page</a>
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+        <button onclick="toggleTheme()" class="theme-toggle" title="Switch theme">
+            <span class="icon-sun">&#9728;&#65039;</span>
+            <span class="icon-moon">&#127769;</span>
+        </button>
+    </nav>
+    {% endif %}
+
+    <!-- Flash messages (errors, info, success) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-container">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Page content -->
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+    (function() {
+        const saved = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', saved);
+    })();
+
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+    }
+    </script>
+</body>
+</html>
