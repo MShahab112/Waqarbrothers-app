@@ -10,8 +10,8 @@
     </div>
     {% if monthly_data %}
     <div style="display: flex; gap: 8px;">
-        <a href="{{ url_for('export_pdf') }}" class="btn btn-ghost">Export PDF</a>
-        <a href="{{ url_for('export_excel') }}" class="btn btn-ghost">Export Excel</a>
+        <a href="{{ url_for('export_pdf') }}" class="btn btn-ghost"><span class="btn-icon">&#128196;</span> Export PDF</a>
+        <a href="{{ url_for('export_excel') }}" class="btn btn-ghost"><span class="btn-icon">&#128202;</span> Export Excel</a>
     </div>
     {% endif %}
 </div>
@@ -117,7 +117,11 @@
         <span class="amount mono {% if net_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ net_profit|pkr }}</span>
     </div>
     {% else %}
-    <div class="empty-msg">No entries recorded yet. Add transactions on the Daily Page to see your dashboard.</div>
+    <div class="empty-msg">
+        <span class="empty-icon">&#128200;</span>
+        <div class="empty-text">No entries recorded yet</div>
+        <div class="empty-hint">Add transactions on the Daily Page to see your dashboard</div>
+    </div>
     {% endif %}
 </div>
 
@@ -125,7 +129,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Shared chart defaults for dark/light theme
-var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text1').trim() || '#fff';
+var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text2').trim() || '#94a3b8';
 var gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#333';
 
 Chart.defaults.color = textColor;
