@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Waqar &amp; Brothers{% endblock %}</title>
+    <link
+      rel="icon"
+      href="{{ url_for('static', filename='WB_favicon.ico') }}"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+    <style>
+      /* Smooth page transition — prevent FOUC */
+      body {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      body.loaded {
+        opacity: 1;
+      }
+    </style>
+    <script>
+      /* Apply theme BEFORE first paint to prevent flash */
+      (function () {
+        var saved = localStorage.getItem("theme") || "dark";
+        document.documentElement.setAttribute("data-theme", saved);
+      })();
+    </script>
+  </head>
+  <body>
+    {% if session.get('user_id') %}
+    <!-- Navigation bar -->
+    <nav class="navbar">
+      <a href="{{ url_for('daily') }}" class="brand">
+        <img
+          src="{{ url_for('static', filename='WB_icon_128x128.png') }}"
+          class="logo-img"
+        />
+        <div class="brand-text">{{ business_name }}</div>
+      </a>
+      <div class="nav-links">
+        <a
+          href="{{ url_for('daily') }}"
+          class="{% if request.endpoint == 'daily' %}active{% endif %}"
+          >Daily Page</a
+        >
+        <a
+          href="{{ url_for('dashboard') }}"
+          class="{% if request.endpoint == 'dashboard' %}active{% endif %}"
+          >Dashboard</a
+        >
+        <a
+          href="{{ url_for('settings') }}"
+          class="{% if request.endpoint == 'settings' %}active{% endif %}"
+          >Settings</a
+        >
+        <a href="{{ url_for('logout') }}">Logout</a>
+      </div>
+      <button onclick="toggleTheme()" class="theme-toggle" title="Switch theme">
+        <span class="icon-sun">&#9728;&#65039;</span>
+        <span class="icon-moon">&#127769;</span>
+      </button>
+    </nav>
+    {% endif %}
+
+    <!-- Flash messages (errors, info, success) -->
+    {% with messages = get_flashed_messages(with_categories=true) %} {% if
+    messages %}
+    <div class="flash-container">
+      {% for category, message in messages %}
+      <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %} {% endwith %}
+
+    <!-- Page content -->
+    <div class="container">{% block content %}{% endblock %}</div>
+
+    <script>
+      // Page reveal
+      requestAnimationFrame(function () {
+        document.body.classList.add("loaded");
+      });
+
+      // Theme toggle
+      function toggleTheme() {
+        var current = document.documentElement.getAttribute("data-theme");
+        var next = current === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("theme", next);
+      }
+
+      // Global ripple effect on all buttons
+      document.addEventListener("click", function (e) {
+        var btn = e.target.closest(".btn");
+        if (!btn) return;
+        var rect = btn.getBoundingClientRect();
+        var ripple = document.createElement("span");
+        ripple.className = "ripple";
+        var size = Math.max(rect.width, rect.height);
+        ripple.style.width = ripple.style.height = size + "px";
+        ripple.style.left = e.clientX - rect.left - size / 2 + "px";
+        ripple.style.top = e.clientY - rect.top - size / 2 + "px";
+        btn.appendChild(ripple);
+        setTimeout(function () {
+          if (ripple.parentNode) ripple.parentNode.removeChild(ripple);
+        }, 600);
+      });
+
+      window.addEventListener("scroll", function () {
+        const nav = document.querySelector(".navbar");
+        if (window.scrollY > 10) {
+          nav.style.boxShadow = "0 8px 30px rgba(0,0,0,0.35)";
+          nav.style.backdropFilter = "blur(28px)";
+        } else {
+          nav.style.boxShadow = "none";
+        }
+      });
+    </script>
+  </body>
+</html>

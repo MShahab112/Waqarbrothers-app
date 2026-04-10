@@ -1,0 +1,8 @@
+dist/
+build/
+installer_output/
+backups/
+logs/
+*.db
+__pycache__/
+app/__pycache__/

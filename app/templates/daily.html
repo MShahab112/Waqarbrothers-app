@@ -1,0 +1,1027 @@
+{% extends "base.html" %}
+{% block title %}Daily Page — {{ display_date }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <div class="page-title">{{ business_name }} <span class="accent">Daily</span></div>
+        <div class="page-subtitle">
+            Manage your daily transactions <span class="live-clock" id="liveClock"></span>
+            <span class="last-saved" id="lastSaved"><span class="saved-check">&#10003;</span> Saved <span id="lastSavedTime"></span></span>
+        </div>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        {% if view_mode == 'monthly' %}
+        <a href="{{ url_for('export_pdf', month=selected_month, year=selected_year) }}" class="btn btn-ghost"><span class="btn-icon">&#128196;</span> Export PDF</a>
+        <a href="{{ url_for('export_excel', month=selected_month, year=selected_year) }}" class="btn btn-ghost"><span class="btn-icon">&#128202;</span> Export Excel</a>
+        {% else %}
+        <a href="{{ url_for('export_pdf', date=page_date) }}" class="btn btn-ghost"><span class="btn-icon">&#128196;</span> Export PDF</a>
+        {% if is_closed %}
+        <button type="button" class="btn btn-close-day" onclick="reopenDay()"><span class="btn-icon">&#128275;</span> Re-open Day</button>
+        {% else %}
+        <button type="button" class="btn btn-close-day" onclick="openCloseDayModal()"><span class="btn-icon">&#128274;</span> Close Day</button>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+{% if is_closed %}
+<div class="closed-banner">
+    <span class="closed-banner-icon">&#128274;</span>
+    <div class="closed-banner-text">
+        <strong>This day is closed.</strong>
+        <span class="closed-banner-sub">No changes allowed &mdash; PDF and final backup already saved in <code>backups/</code>.</span>
+    </div>
+</div>
+{% elif is_reopened %}
+<div class="closed-banner reopened-banner">
+    <span class="closed-banner-icon">&#128275;</span>
+    <div class="closed-banner-text">
+        <strong>Day reopened at {{ reopen_time if reopen_time else 'unknown time' }}.</strong>
+        <span class="closed-banner-sub">Editing is enabled &mdash; the original closed backup is still preserved in <code>backups/</code>.</span>
+    </div>
+</div>
+{% endif %}
+
+<!-- Month Filter Bar -->
+<div class="month-bar">
+    {% set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+    {% for m in range(1, 13) %}
+    <a href="{{ url_for('daily', month=m, year=selected_year) }}"
+       class="month-btn {% if view_mode == 'monthly' and selected_month == m %}active{% endif %}">
+        {{ months[m-1] }}
+    </a>
+    {% endfor %}
+</div>
+
+<!-- Date / Month Navigation -->
+<div class="date-nav">
+    {% if view_mode == 'monthly' %}
+    <a href="{{ url_for('daily', month=prev_month, year=prev_year) }}" class="btn btn-nav">&laquo; Prev Month</a>
+    <div class="date-display">{{ display_date }}</div>
+    <a href="{{ url_for('daily', month=next_month, year=next_year) }}" class="btn btn-nav">Next Month &raquo;</a>
+    <a href="{{ url_for('daily', date=current_date) }}" class="btn btn-nav">Today</a>
+    {% else %}
+    <a href="{{ url_for('daily', date=prev_date) }}" class="btn btn-nav">&laquo; Yesterday</a>
+    <div class="date-display">
+        {{ display_date }}
+        <input type="date" id="datePicker" value="{{ page_date }}" class="date-picker-input">
+    </div>
+    <a href="{{ url_for('daily', date=next_date) }}" class="btn btn-nav">Tomorrow &raquo;</a>
+    <a href="{{ url_for('daily', date=current_date) }}" class="btn btn-nav">Today</a>
+    {% endif %}
+</div>
+
+<!-- Search & Filter Bar -->
+<div class="filter-bar">
+    <form method="GET" action="{{ url_for('daily') }}" class="filter-form">
+        {% if view_mode == 'monthly' %}
+        <input type="hidden" name="month" value="{{ selected_month }}">
+        <input type="hidden" name="year" value="{{ selected_year }}">
+        {% else %}
+        <input type="hidden" name="date" value="{{ page_date }}">
+        {% endif %}
+        <input type="text" name="search" value="{{ search }}" placeholder="Search by name or description..." class="filter-input">
+        <select name="payment_type" class="filter-select">
+            <option value="all" {% if filter_payment == 'all' %}selected{% endif %}>All Types</option>
+            <option value="cash" {% if filter_payment == 'cash' %}selected{% endif %}>Cash</option>
+            <option value="online" {% if filter_payment == 'online' %}selected{% endif %}>Online</option>
+        </select>
+        <select name="category" class="filter-select">
+            <option value="all" {% if category_filter == 'all' %}selected{% endif %}>All Categories</option>
+            <option value="food" {% if category_filter == 'food' %}selected{% endif %}>Food / Tea</option>
+            <option value="transport" {% if category_filter == 'transport' %}selected{% endif %}>Transport</option>
+            <option value="bank" {% if category_filter == 'bank' %}selected{% endif %}>Bank Slip</option>
+            <option value="utility" {% if category_filter == 'utility' %}selected{% endif %}>Utility Bill</option>
+            <option value="zakat" {% if category_filter == 'zakat' %}selected{% endif %}>Zakat / Charity</option>
+            <option value="other" {% if category_filter == 'other' %}selected{% endif %}>Other</option>
+        </select>
+        <button type="submit" class="btn btn-primary" style="padding: 10px 18px;">Search</button>
+        {% if search or filter_payment != 'all' or category_filter != 'all' %}
+        <a href="{{ url_for('daily', month=selected_month if view_mode == 'monthly' else None, year=selected_year if view_mode == 'monthly' else None, date=page_date if view_mode == 'daily' else None) }}" class="btn btn-ghost" style="padding: 10px 18px;">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Opening Balance -->
+<div class="balance-bar">
+    <div class="balance-label">Opening Balance</div>
+    <div class="balance-amount mono">{{ opening_balance|pkr }}</div>
+</div>
+
+<!-- RECOVERY Section -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title"><span style="color: var(--green);">&#9679;</span> Recovery</div>
+        {% if not is_closed %}
+        <button class="btn btn-recovery" onclick="openModal('recoveryModal')"><span class="btn-icon">+</span> Add Recovery <span class="kbd-hint">R</span></button>
+        {% else %}
+        <button class="btn btn-ghost" disabled><span class="btn-icon">&#128274;</span> Locked</button>
+        {% endif %}
+    </div>
+
+    {% if recoveries %}
+        {% for entry in recoveries %}
+        <div class="entry-row">
+            {% if view_mode == 'monthly' %}
+            <div class="entry-date">{{ entry['date']|monthday }}</div>
+            {% endif %}
+            <div class="entry-dot recovery"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">{{ entry['description'] }}</div>
+                <div class="entry-notes">{{ entry['notes'] or '' }}</div>
+            </div>
+            <div class="entry-amount recovery mono">{{ entry['amount']|pkr }}</div>
+            <div class="entry-actions">
+                {% if not is_closed %}
+                <a href="{{ url_for('edit_entry', entry_id=entry['id']) }}"
+                   class="btn btn-sm btn-edit">&#9998; Edit</a>
+                <button type="button" class="btn btn-sm btn-del"
+                        onclick="confirmDelete('{{ url_for('delete_entry', entry_id=entry['id']) }}', '{{ entry['description'] }}')">&#10005; Del</button>
+                {% else %}
+                <span class="locked-badge">&#128274;</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-msg">
+        <span class="empty-icon">&#128181;</span>
+        <div class="empty-text">No recovery entries yet</div>
+        <div class="empty-hint">Click + Add Recovery or press R to get started</div>
+    </div>
+    {% endif %}
+
+    <div class="section-total">
+        <span>Total Recovery</span>
+        <span class="amount mono recovery">{{ total_recovery|pkr }}</span>
+    </div>
+</div>
+
+<!-- EXPENSES Section -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title"><span style="color: var(--red);">&#9679;</span> Expenses</div>
+        {% if not is_closed %}
+        <button class="btn btn-expense" onclick="openModal('expenseModal')"><span class="btn-icon">+</span> Add Expense <span class="kbd-hint">E</span></button>
+        {% else %}
+        <button class="btn btn-ghost" disabled><span class="btn-icon">&#128274;</span> Locked</button>
+        {% endif %}
+    </div>
+
+    {% if expenses %}
+        {% for entry in expenses %}
+        <div class="entry-row">
+            {% if view_mode == 'monthly' %}
+            <div class="entry-date">{{ entry['date']|monthday }}</div>
+            {% endif %}
+            <div class="entry-dot expense"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">{{ entry['description'] }}</div>
+                {% if entry['category'] and entry['category'] != 'other' %}
+                <div class="entry-category">{{ entry['category']|capitalize }}</div>
+                {% endif %}
+                <div class="entry-notes">{{ entry['notes'] or '' }}</div>
+            </div>
+            <div class="entry-amount expense mono">{{ entry['amount']|pkr }}</div>
+            <div class="entry-actions">
+                {% if entry['receipt'] %}
+                <button type="button" class="btn btn-sm btn-ghost"
+                        onclick="openReceiptModal('{{ url_for('uploaded_file', filename=entry['receipt']) }}')">Receipt</button>
+                {% endif %}
+                {% if not is_closed %}
+                <a href="{{ url_for('edit_entry', entry_id=entry['id']) }}"
+                   class="btn btn-sm btn-edit">&#9998; Edit</a>
+                <button type="button" class="btn btn-sm btn-del"
+                        onclick="confirmDelete('{{ url_for('delete_entry', entry_id=entry['id']) }}', '{{ entry['description'] }}')">&#10005; Del</button>
+                {% else %}
+                <span class="locked-badge">&#128274;</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-msg">
+        <span class="empty-icon">&#128179;</span>
+        <div class="empty-text">No expense entries yet</div>
+        <div class="empty-hint">Click + Add Expense or press E to get started</div>
+    </div>
+    {% endif %}
+
+    <div class="section-total">
+        <span>Total Expenses</span>
+        <span class="amount mono expense">{{ total_expenses|pkr }}</span>
+    </div>
+</div>
+
+<!-- DAILY SUMMARY — Dashboard Cards -->
+<div class="summary-cards" id="summaryCards">
+    <div class="summary-stat-card green">
+        <div class="stat-label">Total Recovery</div>
+        <div class="stat-value mono">{{ total_recovery|pkr }}</div>
+    </div>
+    <div class="summary-stat-card red">
+        <div class="stat-label">Total Expenses</div>
+        <div class="stat-value mono">{{ total_expenses|pkr }}</div>
+    </div>
+    <div class="summary-stat-card highlight">
+        <div class="stat-label">Closing Balance</div>
+        <div class="stat-value mono {% if closing_balance < 0 %}negative-balance{% endif %}">{{ closing_balance|pkr }}</div>
+    </div>
+</div>
+
+<!-- DAILY SUMMARY — Detailed Breakdown -->
+<div class="card">
+    <h2 style="font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Daily Summary</h2>
+    <div class="summary-row">
+        <span class="summary-label">Opening Balance</span>
+        <span class="summary-amount mono">{{ opening_balance|pkr }}</span>
+    </div>
+    <div class="summary-row">
+        <span class="summary-label"><span class="operator">+</span> Total Recovery</span>
+        <span class="summary-amount mono recovery">{{ total_recovery|pkr }}</span>
+    </div>
+    <div class="summary-row">
+        <span class="summary-label"><span class="operator">&minus;</span> Total Expenses</span>
+        <span class="summary-amount mono expense">{{ total_expenses|pkr }}</span>
+    </div>
+    <div class="summary-row closing">
+        <span class="summary-label"><strong>= Closing Balance</strong></span>
+        <span class="summary-amount mono closing-hero {% if closing_balance < 0 %}negative{% endif %}">{{ closing_balance|pkr }}</span>
+    </div>
+</div>
+
+<!-- Trust Signal -->
+<div class="trust-bar">
+    <div class="trust-item"><span class="trust-icon">&#128274;</span> Data stored locally on this device</div>
+    <div class="trust-item"><span class="trust-icon">&#9989;</span> Auto-saved on every action</div>
+</div>
+
+<!-- STICKY SUMMARY BAR -->
+<div class="sticky-summary" id="stickySummary">
+    <div class="sticky-item">
+        <span class="sticky-label">Recovery</span>
+        <span class="sticky-value green mono">{{ total_recovery|pkr }}</span>
+    </div>
+    <div class="sticky-divider"></div>
+    <div class="sticky-item">
+        <span class="sticky-label">Expense</span>
+        <span class="sticky-value red mono">{{ total_expenses|pkr }}</span>
+    </div>
+    <div class="sticky-divider"></div>
+    <div class="sticky-item">
+        <span class="sticky-label">Balance</span>
+        <span class="sticky-value brand mono {% if closing_balance < 0 %}negative{% endif %}">{{ closing_balance|pkr }}</span>
+    </div>
+</div>
+
+<!-- RECOVERY MODAL -->
+<div id="recoveryModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--green);">&#9679;</span> Add Recovery Entry</div>
+            <button type="button" onclick="closeModal('recoveryModal')" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_entry') }}" data-toast="Recovery added successfully">
+            <input type="hidden" name="type" value="recovery">
+            <div class="form-group">
+                <label for="recovery_date">Date</label>
+                <input type="date" id="recovery_date" name="date" value="{{ page_date }}" required tabindex="1">
+            </div>
+            <div class="form-group suggestions-wrap">
+                <label for="recovery_description">Salesman Name</label>
+                <input type="text" id="recovery_description" name="description" required
+                       placeholder="e.g. Khalid" autocomplete="off" tabindex="2"
+                       data-suggest="recovery">
+                <div class="suggestions-list" id="recoverySuggestions" style="display:none;"></div>
+            </div>
+            <div class="form-group">
+                <label for="recovery_amount">Amount (PKR)</label>
+                <input type="number" id="recovery_amount" name="amount" required
+                       min="1" step="1" placeholder="e.g. 150000" class="amount-input" tabindex="3">
+            </div>
+            <div class="form-group">
+                <label for="recovery_notes">Notes (optional)</label>
+                <input type="text" id="recovery_notes" name="notes"
+                       placeholder="Any extra details" tabindex="4">
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeModal('recoveryModal')" class="btn btn-ghost" tabindex="6">Cancel</button>
+                <button type="submit" class="btn btn-primary" tabindex="5">Save Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- EXPENSE MODAL -->
+<div id="expenseModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--red);">&#9679;</span> Add Expense Entry</div>
+            <button type="button" onclick="closeModal('expenseModal')" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_entry') }}" enctype="multipart/form-data" data-toast="Expense saved successfully">
+            <input type="hidden" name="type" value="expense">
+            <div class="form-group">
+                <label for="expense_date">Date</label>
+                <input type="date" id="expense_date" name="date" value="{{ page_date }}" required tabindex="1">
+            </div>
+            <div class="form-group suggestions-wrap">
+                <label for="expense_description">Description</label>
+                <input type="text" id="expense_description" name="description" required
+                       placeholder="e.g. Food / Tea" autocomplete="off" tabindex="2"
+                       data-suggest="expense">
+                <div class="suggestions-list" id="expenseSuggestions" style="display:none;"></div>
+            </div>
+            <div class="form-group">
+                <label for="expense_payment_type">Payment Type</label>
+                <select name="payment_type" id="expense_payment_type" onchange="toggleReceiptField()" tabindex="3">
+                    <option value="cash">Cash</option>
+                    <option value="online">Online</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="expense_category">Category</label>
+                <select name="category" id="expense_category" tabindex="4">
+                    <option value="food">Food / Tea</option>
+                    <option value="transport">Transport</option>
+                    <option value="bank">Bank Slip</option>
+                    <option value="utility">Utility Bill</option>
+                    <option value="zakat">Zakat / Charity</option>
+                    <option value="other" selected>Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="expense_amount" id="expense_amount_label">Amount (PKR)</label>
+                <input type="number" id="expense_amount" name="amount" required
+                       min="1" step="1" placeholder="e.g. 5000" class="amount-input" tabindex="5">
+            </div>
+            <div class="form-group" id="receipt-field" style="display:none;">
+                <label for="expense_receipt">Upload Transaction Screenshot</label>
+                <input type="file" id="expense_receipt" name="receipt" accept="image/*" tabindex="6">
+            </div>
+            <div class="form-group">
+                <label for="expense_notes">Notes (optional)</label>
+                <input type="text" id="expense_notes" name="notes"
+                       placeholder="Any extra details" tabindex="7">
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeModal('expenseModal')" class="btn btn-ghost" tabindex="9">Cancel</button>
+                <button type="submit" class="btn btn-primary" tabindex="8">Save Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- RECEIPT PREVIEW MODAL -->
+<div id="receiptModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:600px; padding:16px;">
+        <div class="modal-header" style="margin-bottom:12px;">
+            <div class="modal-title">Receipt</div>
+            <button onclick="closeReceiptModal()" class="modal-close">&times;</button>
+        </div>
+        <img id="receiptImage" src="" style="width:100%; border-radius:10px; display:block;">
+    </div>
+</div>
+
+<!-- DELETE CONFIRMATION MODAL -->
+<div id="deleteModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width: 380px;">
+        <div class="delete-modal-body">
+            <div class="delete-modal-icon">&#9888;&#65039;</div>
+            <div class="delete-modal-text">Are you sure you want to delete</div>
+            <div class="delete-modal-desc" id="deleteEntryName"></div>
+        </div>
+        <div class="delete-modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+            <form id="deleteForm" method="POST" style="flex:1; display:flex;">
+                <button type="submit" class="btn btn-delete-confirm" style="flex:1;">Delete</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- HIDDEN REOPEN DAY FORM -->
+{% if view_mode == 'daily' and is_closed %}
+<form id="reopenForm" method="POST" action="{{ url_for('reopen_day') }}" autocomplete="off" style="display:none;">
+    <input type="hidden" name="date" value="{{ page_date }}">
+    <input type="hidden" name="pin" id="reopenPin" value="">
+</form>
+{% endif %}
+
+<!-- CLOSE DAY CONFIRMATION MODAL -->
+{% if view_mode == 'daily' %}
+<div id="closeDayModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width: 440px;">
+        <div class="delete-modal-body">
+            <div class="delete-modal-icon">&#128274;</div>
+            <div class="delete-modal-text">Close this day?</div>
+            <div class="delete-modal-desc">{{ display_date }}</div>
+            <div style="margin-top: 14px; font-size: 13px; color: var(--text-muted); text-align: left; line-height: 1.7;">
+                This will:<br>
+                &bull; Create a final backup file<br>
+                &bull; Generate and download a PDF report<br>
+                &bull; Cannot be closed a second time
+            </div>
+        </div>
+        <div class="delete-modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeCloseDayModal()">Cancel</button>
+            <form id="closeDayForm" method="POST" action="{{ url_for('close_day') }}" style="flex:1; display:flex;">
+                <input type="hidden" name="date" value="{{ page_date }}">
+                <button type="submit" class="btn btn-close-day-confirm" style="flex:1;">Yes, Close Day</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- REOPEN DAY PIN MODAL -->
+{% if view_mode == 'daily' and is_closed %}
+<div id="pinModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width: 380px;">
+        <div class="delete-modal-body">
+            <div class="delete-modal-icon">&#128274;</div>
+            <div class="delete-modal-text">Enter Security PIN</div>
+            <div class="delete-modal-desc">Required to reopen {{ display_date }}</div>
+
+            <div class="pin-input-wrap">
+                <input type="password"
+                       id="pinInput"
+                       class="pin-input"
+                       maxlength="4"
+                       inputmode="numeric"
+                       pattern="\d{4}"
+                       autocomplete="one-time-code"
+                       autocorrect="off"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       data-lpignore="true"
+                       data-1p-ignore="true"
+                       data-form-type="other"
+                       placeholder="&bull; &bull; &bull; &bull;">
+                <button type="button"
+                        id="pinToggleBtn"
+                        class="pin-toggle"
+                        onclick="togglePin()"
+                        aria-label="Show or hide PIN">&#128065;</button>
+            </div>
+            <div id="pinError" class="pin-error" style="display:none;"></div>
+        </div>
+        <div class="delete-modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="closePinModal()">Cancel</button>
+            <button type="button" class="btn btn-close-day-confirm" style="flex:1;" onclick="submitPin()">Reopen Day</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ============================================================
+// LIVE CLOCK
+// ============================================================
+(function() {
+    var el = document.getElementById('liveClock');
+    if (!el) return;
+    function tick() {
+        var d = new Date();
+        var h = d.getHours(), m = d.getMinutes();
+        var ap = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        el.textContent = '— ' + h + ':' + (m < 10 ? '0' : '') + m + ' ' + ap;
+    }
+    tick();
+    setInterval(tick, 15000);
+})();
+
+// ============================================================
+// TOAST SYSTEM
+// ============================================================
+function showToast(message, type) {
+    setTimeout(function() {
+        var c = document.getElementById('toastContainer');
+        var t = document.createElement('div');
+        t.className = 'toast toast-' + (type || 'success');
+        t.innerHTML = '<span class="toast-icon">' + (type === 'error' ? '&#10060;' : '&#10003;') + '</span>' + message;
+        c.appendChild(t);
+        playTickSound();
+        setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 3200);
+    }, 120);
+}
+
+function playTickSound() {
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.12);
+    } catch(e) {}
+}
+
+// Convert flash messages to toasts
+(function() {
+    document.querySelectorAll('.flash-success').forEach(function(f) {
+        showToast(f.textContent.trim(), 'success');
+        f.style.display = 'none';
+    });
+    document.querySelectorAll('.flash-error').forEach(function(f) {
+        showToast(f.textContent.trim(), 'error');
+        f.style.display = 'none';
+    });
+})();
+
+// ============================================================
+// LAST SAVED INDICATOR
+// ============================================================
+(function() {
+    var ts = sessionStorage.getItem('lastSavedAt');
+    if (ts) {
+        var el = document.getElementById('lastSaved');
+        var timeEl = document.getElementById('lastSavedTime');
+        if (el && timeEl) {
+            timeEl.textContent = 'at ' + ts;
+            el.classList.add('visible');
+        }
+    }
+})();
+
+// ============================================================
+// SUGGESTIONS ENGINE (localStorage-backed)
+// ============================================================
+var SuggestEngine = {
+    _key: function(type) { return 'wb_recent_' + type; },
+
+    save: function(type, value) {
+        if (!value || !value.trim()) return;
+        value = value.trim();
+        var key = this._key(type);
+        var list = JSON.parse(localStorage.getItem(key) || '[]');
+        // Remove duplicates, add to front
+        list = list.filter(function(v) { return v.toLowerCase() !== value.toLowerCase(); });
+        list.unshift(value);
+        if (list.length > 20) list = list.slice(0, 20);
+        localStorage.setItem(key, JSON.stringify(list));
+    },
+
+    get: function(type, query) {
+        var list = JSON.parse(localStorage.getItem(this._key(type)) || '[]');
+        if (!query) return list.slice(0, 6);
+        var q = query.toLowerCase();
+        return list.filter(function(v) { return v.toLowerCase().indexOf(q) !== -1; }).slice(0, 6);
+    }
+};
+
+// Build real suggestions from current page entries
+(function() {
+    {% if recoveries %}
+    {% for entry in recoveries %}
+    SuggestEngine.save('recovery', '{{ entry['description']|e }}');
+    {% endfor %}
+    {% endif %}
+    {% if expenses %}
+    {% for entry in expenses %}
+    SuggestEngine.save('expense', '{{ entry['description']|e }}');
+    {% endfor %}
+    {% endif %}
+})();
+
+// Wire up suggestion dropdowns
+document.querySelectorAll('[data-suggest]').forEach(function(input) {
+    var type = input.getAttribute('data-suggest');
+    var listEl = input.parentElement.querySelector('.suggestions-list');
+    if (!listEl) return;
+
+    var activeIdx = -1;
+
+    function render(items) {
+        if (!items.length) { listEl.style.display = 'none'; return; }
+        listEl.innerHTML = '';
+        items.forEach(function(val, i) {
+            var div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = val;
+            div.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                input.value = val;
+                listEl.style.display = 'none';
+                // Move focus to amount field
+                var amountField = input.closest('form').querySelector('.amount-input');
+                if (amountField) amountField.focus();
+            });
+            listEl.appendChild(div);
+        });
+        listEl.style.display = 'block';
+        activeIdx = -1;
+    }
+
+    input.addEventListener('focus', function() {
+        render(SuggestEngine.get(type, input.value));
+    });
+
+    input.addEventListener('input', function() {
+        render(SuggestEngine.get(type, input.value));
+    });
+
+    input.addEventListener('blur', function() {
+        setTimeout(function() { listEl.style.display = 'none'; }, 150);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        var items = listEl.querySelectorAll('.suggestion-item');
+        if (!items.length || listEl.style.display === 'none') return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, items.length - 1);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'Enter' && activeIdx >= 0) {
+            e.preventDefault();
+            input.value = items[activeIdx].textContent;
+            listEl.style.display = 'none';
+            var amountField = input.closest('form').querySelector('.amount-input');
+            if (amountField) amountField.focus();
+        }
+    });
+});
+
+// ============================================================
+// DELETE CONFIRMATION MODAL
+// ============================================================
+function confirmDelete(actionUrl, entryName) {
+    document.getElementById('deleteForm').action = actionUrl;
+    document.getElementById('deleteEntryName').textContent = '"' + entryName + '"?';
+    document.getElementById('deleteModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+});
+
+// ============================================================
+// CLOSE DAY CONFIRMATION MODAL
+// ============================================================
+function openCloseDayModal() {
+    var m = document.getElementById('closeDayModal');
+    if (!m) return;
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCloseDayModal() {
+    var m = document.getElementById('closeDayModal');
+    if (!m) return;
+    m.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+(function() {
+    var cdm = document.getElementById('closeDayModal');
+    if (cdm) {
+        cdm.addEventListener('click', function(e) {
+            if (e.target === this) closeCloseDayModal();
+        });
+    }
+    var cdf = document.getElementById('closeDayForm');
+    if (cdf) {
+        cdf.addEventListener('submit', function() {
+            var btn = cdf.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Closing...';
+            }
+            // Browser keeps current page while PDF downloads (attachment
+            // response does not navigate). Give the download a moment to
+            // start, then reload so the locked banner + Re-open button
+            // appear immediately — no manual refresh needed.
+            // If the backend flashed an error and sent a 302 redirect
+            // instead, the browser already navigated and this timeout
+            // never fires (JS context was destroyed).
+            setTimeout(function() {
+                if (btn) { btn.disabled = false; btn.textContent = 'Yes, Close Day'; }
+                closeCloseDayModal();
+                window.location.reload();
+            }, 2500);
+        });
+    }
+})();
+
+// ============================================================
+// REOPEN DAY — PIN MODAL
+// ============================================================
+function reopenDay() {
+    var m = document.getElementById('pinModal');
+    if (!m) return;
+    var inp = document.getElementById('pinInput');
+    var err = document.getElementById('pinError');
+    if (inp) {
+        inp.value = '';
+        inp.type = 'password';
+    }
+    if (err) {
+        err.style.display = 'none';
+        err.textContent = '';
+    }
+    var tbtn = document.getElementById('pinToggleBtn');
+    if (tbtn) tbtn.innerHTML = '&#128065;';
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    // Focus after the modal has painted
+    setTimeout(function() { if (inp) inp.focus(); }, 30);
+}
+
+function closePinModal() {
+    var m = document.getElementById('pinModal');
+    if (!m) return;
+    m.style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function showPinError(msg) {
+    var err = document.getElementById('pinError');
+    if (!err) return;
+    err.textContent = msg;
+    err.style.display = 'block';
+}
+
+function submitPin() {
+    var inp = document.getElementById('pinInput');
+    if (!inp) return;
+    var pin = (inp.value || '').trim();
+    if (!/^\d{4}$/.test(pin)) {
+        showPinError('PIN must be exactly 4 digits.');
+        inp.focus();
+        inp.select();
+        return;
+    }
+    var f = document.getElementById('reopenForm');
+    var pinField = document.getElementById('reopenPin');
+    if (f && pinField) {
+        pinField.value = pin;
+        // Clear the visible password-type field BEFORE submitting so that
+        // at submit time there is no populated type=password input in the
+        // DOM for the browser's password manager to latch onto. The actual
+        // PIN travels in the hidden #reopenPin field inside reopenForm.
+        inp.value = '';
+        inp.blur();
+        f.submit();
+    }
+}
+
+function togglePin() {
+    var inp = document.getElementById('pinInput');
+    var tbtn = document.getElementById('pinToggleBtn');
+    if (!inp) return;
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        if (tbtn) tbtn.innerHTML = '&#128064;';   // eyes
+    } else {
+        inp.type = 'password';
+        if (tbtn) tbtn.innerHTML = '&#128065;';   // single eye
+    }
+    inp.focus();
+}
+
+// Dismiss on overlay click + Enter to submit / Escape to cancel
+(function() {
+    var m = document.getElementById('pinModal');
+    if (!m) return;
+    m.addEventListener('click', function(e) {
+        if (e.target === this) closePinModal();
+    });
+    var inp = document.getElementById('pinInput');
+    if (inp) {
+        inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitPin();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closePinModal();
+            }
+        });
+        // Strip non-digits as the user types
+        inp.addEventListener('input', function() {
+            var cleaned = inp.value.replace(/\D/g, '').slice(0, 4);
+            if (cleaned !== inp.value) inp.value = cleaned;
+            var err = document.getElementById('pinError');
+            if (err) err.style.display = 'none';
+        });
+    }
+})();
+
+// ============================================================
+// RECEIPT MODAL
+// ============================================================
+function openReceiptModal(src) {
+    document.getElementById('receiptImage').src = src;
+    document.getElementById('receiptModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeReceiptModal() {
+    document.getElementById('receiptModal').style.display = 'none';
+    document.getElementById('receiptImage').src = '';
+    document.body.style.overflow = 'auto';
+}
+
+document.getElementById('receiptModal').addEventListener('click', function(e) {
+    if (e.target === this) closeReceiptModal();
+});
+
+// ============================================================
+// ENTRY MODALS — Smart Open with Autofocus
+// ============================================================
+var modalFocus = {
+    recoveryModal: 'recovery_description',
+    expenseModal: 'expense_description'
+};
+
+function openModal(id) {
+    var modal = document.getElementById(id);
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    // Prefill description from last used value
+    var focusId = modalFocus[id];
+    if (focusId) {
+        var descInput = document.getElementById(focusId);
+        var type = id === 'recoveryModal' ? 'recovery' : 'expense';
+        var lastUsed = localStorage.getItem('wb_last_' + type);
+        if (lastUsed && !descInput.value) {
+            descInput.value = lastUsed;
+        }
+        setTimeout(function() {
+            // Focus the amount field if description is prefilled, otherwise description
+            if (descInput.value) {
+                var amountField = modal.querySelector('.amount-input');
+                if (amountField) { amountField.focus(); amountField.select(); }
+            } else {
+                descInput.focus();
+            }
+        }, 120);
+    }
+}
+
+function closeModal(id) {
+    var modal = document.getElementById(id);
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    var form = modal.querySelector('form');
+    if (form) form.reset();
+    var dateInput = modal.querySelector('input[name="date"]');
+    if (dateInput) dateInput.value = '{{ page_date }}';
+    if (id === 'expenseModal') {
+        document.getElementById('receipt-field').style.display = 'none';
+        document.getElementById('expense_amount_label').textContent = 'Amount (PKR)';
+    }
+    // Hide suggestions
+    modal.querySelectorAll('.suggestions-list').forEach(function(s) { s.style.display = 'none'; });
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            if (overlay.id === 'deleteModal') { closeDeleteModal(); }
+            else if (overlay.id === 'receiptModal') { closeReceiptModal(); }
+            else { closeModal(overlay.id); }
+        }
+    });
+});
+
+// ============================================================
+// KEYBOARD SHORTCUTS — R / E / ESC
+// ============================================================
+document.addEventListener('keydown', function(e) {
+    var tag = (e.target.tagName || '').toLowerCase();
+    var isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+    if (e.key === 'Escape') {
+        var dm = document.getElementById('deleteModal');
+        if (dm && dm.style.display === 'flex') { closeDeleteModal(); return; }
+        var cdm = document.getElementById('closeDayModal');
+        if (cdm && cdm.style.display === 'flex') { closeCloseDayModal(); return; }
+        var pm = document.getElementById('pinModal');
+        if (pm && pm.style.display === 'flex') { closePinModal(); return; }
+        var rm = document.getElementById('receiptModal');
+        if (rm && rm.style.display === 'flex') { closeReceiptModal(); return; }
+        document.querySelectorAll('.modal-overlay').forEach(function(o) {
+            if (o.style.display === 'flex') closeModal(o.id);
+        });
+        return;
+    }
+
+    if (isInput) return;
+
+    {% if not is_closed %}
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); openModal('recoveryModal'); }
+    if (e.key === 'e' || e.key === 'E') { e.preventDefault(); openModal('expenseModal'); }
+    {% endif %}
+});
+
+// ============================================================
+// TOGGLE RECEIPT FIELD
+// ============================================================
+function toggleReceiptField() {
+    var pt = document.getElementById('expense_payment_type').value;
+    var rf = document.getElementById('receipt-field');
+    var al = document.getElementById('expense_amount_label');
+    if (pt === 'online') {
+        rf.style.display = 'block';
+        al.textContent = 'Transaction Amount (confirm from slip)';
+    } else {
+        rf.style.display = 'none';
+        al.textContent = 'Amount (PKR)';
+    }
+}
+
+// ============================================================
+// DATE PICKER
+// ============================================================
+var datePicker = document.getElementById('datePicker');
+if (datePicker) {
+    datePicker.addEventListener('change', function() {
+        if (this.value) window.location.href = '{{ url_for("daily") }}?date=' + this.value;
+    });
+}
+
+// ============================================================
+// SAVE BUTTON — Spinner + Remember + Toast + Last Saved
+// ============================================================
+document.querySelectorAll('.modal-card form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+        // Spinner state
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn && !btn.classList.contains('btn-saving')) {
+            btn.classList.add('btn-saving');
+            btn.textContent = 'Saving';
+        }
+
+        // Remember description for next time
+        var typeInput = form.querySelector('input[name="type"]');
+        var descInput = form.querySelector('input[name="description"]');
+        if (typeInput && descInput && descInput.value) {
+            var type = typeInput.value;
+            localStorage.setItem('wb_last_' + type, descInput.value.trim());
+            SuggestEngine.save(type, descInput.value.trim());
+        }
+
+        // Queue toast + last-saved time
+        var toastMsg = form.getAttribute('data-toast');
+        if (toastMsg) {
+            sessionStorage.setItem('pendingToast', toastMsg);
+        }
+        var now = new Date();
+        var h = now.getHours(), m = now.getMinutes();
+        var ap = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        sessionStorage.setItem('lastSavedAt', h + ':' + (m < 10 ? '0' : '') + m + ' ' + ap);
+    });
+});
+
+// Show queued toast from previous save (with slight delay for perceived speed)
+(function() {
+    var pending = sessionStorage.getItem('pendingToast');
+    if (pending) {
+        sessionStorage.removeItem('pendingToast');
+        setTimeout(function() { showToast(pending, 'success'); }, 250);
+    }
+})();
+
+// ============================================================
+// STICKY SUMMARY BAR
+// ============================================================
+(function() {
+    var cards = document.getElementById('summaryCards');
+    var bar = document.getElementById('stickySummary');
+    if (!cards || !bar) return;
+    var obs = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            bar.classList.toggle('visible', !entry.isIntersecting);
+        });
+    }, { threshold: 0.1 });
+    obs.observe(cards);
+})();
+</script>
+{% endblock %}
