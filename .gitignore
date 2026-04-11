@@ -1,10 +1,30 @@
-dist/
-build/
-app/dist/
-app/build/
-installer_output/
-backups/
-logs/
-*.db
+# Python
 __pycache__/
-app/__pycache__/
+*.pyc
+
+# Build folders
+build/
+dist/
+app/build/
+app/dist/
+
+# Executables
+*.exe
+
+# PyInstaller
+*.spec
+
+# Installer output
+installer_output/
+
+# Database
+*.db
+
+# Logs
+logs/
+
+# Backups
+backups/
+
+# Claude / local config
+.claude/

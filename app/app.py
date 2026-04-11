@@ -4,6 +4,7 @@
 import os
 import sys
 import io
+import time
 import shutil
 import sqlite3
 import webbrowser
@@ -16,6 +17,7 @@ from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, g, send_file, send_from_directory)
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from reportlab.platypus import Spacer
 
 
 def resource_path(relative_path):
@@ -86,6 +88,7 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
 UPLOAD_FOLDER = os.path.join(BASE_PATH, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 
 # Top-level assets folder (logos, icons, brand art). Resolved once at
 # startup so every request hits a cached path.
@@ -254,6 +257,12 @@ def login_required(f):
 
 # --- Debug Error Handler (shows full traceback in browser) ---
 
+@app.errorhandler(413)
+def file_too_large(e):
+    flash('File too large. Maximum allowed size is 10 MB.', 'error')
+    return redirect(url_for('settings'))
+
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     return f"<h2>Error:</h2><pre>{traceback.format_exc()}</pre>", 500
@@ -295,7 +304,9 @@ def login():
     db = get_db()
 
     # Look up the user
-    user = db.execute('SELECT * FROM users WHERE username = ?',
+    user = db.execute('''SELECT id, username, password, must_change_password,
+                                failed_attempts, locked_until
+                         FROM users WHERE username = ?''',
                       (username,)).fetchone()
 
     if user is None:
@@ -318,7 +329,9 @@ def login():
                           WHERE id = ?''', (user['id'],))
             db.commit()
             # Re-fetch user after reset
-            user = db.execute('SELECT * FROM users WHERE id = ?',
+            user = db.execute('''SELECT id, username, password, must_change_password,
+                                            failed_attempts, locked_until
+                                     FROM users WHERE id = ?''',
                               (user['id'],)).fetchone()
 
     # Check the password
@@ -465,10 +478,20 @@ app.jinja_env.filters['monthday'] = format_monthday
 # --- Step 5: Daily Page ---
 
 def get_setting(db, key):
-    """Get a single value from the settings table."""
+    """Get a single value from the settings table.
+    Results are cached on Flask's g object for the current request,
+    so repeated lookups of the same key hit the DB only once.
+    """
+    cache = getattr(g, '_settings_cache', None)
+    if cache is None:
+        cache = g._settings_cache = {}
+    if key in cache:
+        return cache[key]
     row = db.execute('SELECT value FROM settings WHERE key = ?',
                      (key,)).fetchone()
-    return row['value'] if row else None
+    val = row['value'] if row else None
+    cache[key] = val
+    return val
 
 
 def get_opening_balance(db, current_date):
@@ -811,6 +834,7 @@ def add_entry():
     ''', (entry_date, entry_type, amount, description, notes, created_at,
           payment_type, receipt_filename, category))
     db.commit()
+    _reports_cache.clear()
 
     flash(f'{entry_type.capitalize()} entry saved.', 'success')
     return redirect(url_for('daily', date=entry_date))
@@ -825,7 +849,9 @@ def edit_entry(entry_id):
     db = get_db()
 
     # Look up the entry (must exist and not be deleted)
-    entry = db.execute('''SELECT * FROM daily_entries
+    entry = db.execute('''SELECT id, date, type, amount, description,
+                                 notes, payment_type, receipt, category
+                          FROM daily_entries
                           WHERE id = ? AND is_deleted = 0''',
                        (entry_id,)).fetchone()
 
@@ -891,6 +917,7 @@ def edit_entry(entry_id):
                   WHERE id = ?''',
                (entry_date, description, amount, notes, entry_id))
     db.commit()
+    _reports_cache.clear()
 
     flash('Entry updated.', 'success')
     return redirect(url_for('daily', date=entry_date))
@@ -919,6 +946,7 @@ def delete_entry(entry_id):
     db.execute('UPDATE daily_entries SET is_deleted = 1 WHERE id = ?',
                (entry_id,))
     db.commit()
+    _reports_cache.clear()
 
     flash('Entry deleted.', 'info')
     return redirect(url_for('daily', date=entry['date']))
@@ -935,9 +963,27 @@ def settings():
     if request.method == 'GET':
         business_name = get_setting(db, 'business_name') or ''
         opening_balance = get_setting(db, 'opening_balance') or '0'
+
+        # Format last backup time for display
+        last_backup_raw = get_setting(db, 'last_backup_time')
+        last_backup_display = None
+        if last_backup_raw:
+            try:
+                dt = datetime.strptime(last_backup_raw, '%Y-%m-%d %H:%M')
+                last_backup_display = (
+                    f'{dt.day} {dt.strftime("%B")} {dt.year}, '
+                    f'{dt.strftime("%I:%M %p").lstrip("0")}'
+                )
+            except ValueError:
+                last_backup_display = last_backup_raw
+
+        last_backup_filename = get_setting(db, 'last_backup_filename')
+
         return render_template('settings.html',
                                business_name=business_name,
-                               opening_balance=opening_balance)
+                               opening_balance=opening_balance,
+                               last_backup_time=last_backup_display,
+                               last_backup_filename=last_backup_filename)
 
     # POST — save settings
     business_name = request.form.get('business_name', '').strip()
@@ -971,6 +1017,7 @@ def settings():
     db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
                ('opening_balance', str(opening_balance)))
     db.commit()
+    _reports_cache.clear()
 
     flash('Settings saved.', 'success')
     return redirect(url_for('settings'))
@@ -1078,6 +1125,145 @@ def dashboard():
                            best_month=best_month,
                            worst_month=worst_month,
                            category_totals=category_totals)
+
+
+# --- Reports ---
+
+# Lightweight in-memory cache for /reports (TTL = 8 seconds).
+# Avoids redundant DB aggregation on rapid refreshes.
+_reports_cache = {}
+_REPORTS_CACHE_TTL = 8       # seconds
+_CHART_DAY_LIMIT = 30        # max data points shown in charts
+
+
+@app.route('/reports')
+@login_required
+def reports():
+    """Show daily summaries with recovery, expense, and profit."""
+
+    # --- Check cache ---
+    date_from = request.args.get('from', '').strip()
+    date_to = request.args.get('to', '').strip()
+    cache_key = f'{date_from or "none"}_{date_to or "none"}'
+    now = time.time()
+
+    if cache_key in _reports_cache:
+        expiry, cached_ctx = _reports_cache[cache_key]
+        if expiry > now:
+            return render_template('reports.html', **cached_ctx)
+        del _reports_cache[cache_key]
+
+    # --- Compute from DB ---
+    db = get_db()
+    business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
+
+    # Overall totals
+    overall_sql = '''
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0)
+                AS total_recovery,
+            COALESCE(SUM(CASE WHEN type = 'expense'  THEN amount ELSE 0 END), 0)
+                AS total_expense
+        FROM daily_entries
+        WHERE is_deleted = 0
+    '''
+    overall_params = []
+
+    # Daily breakdown
+    daily_sql = '''
+        SELECT
+            date,
+            COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0)
+                AS recovery,
+            COALESCE(SUM(CASE WHEN type = 'expense'  THEN amount ELSE 0 END), 0)
+                AS expense
+        FROM daily_entries
+        WHERE is_deleted = 0
+    '''
+    daily_params = []
+
+    # Apply date filters if provided
+    if date_from:
+        overall_sql += ' AND date >= ?'
+        overall_params.append(date_from)
+        daily_sql += ' AND date >= ?'
+        daily_params.append(date_from)
+    if date_to:
+        overall_sql += ' AND date <= ?'
+        overall_params.append(date_to)
+        daily_sql += ' AND date <= ?'
+        daily_params.append(date_to)
+
+    daily_sql += ' GROUP BY date ORDER BY date DESC'
+
+    overall = db.execute(overall_sql, overall_params).fetchone()
+    total_recovery = overall['total_recovery']
+    total_expense = overall['total_expense']
+    total_profit = total_recovery - total_expense
+
+    rows = db.execute(daily_sql, daily_params).fetchall()
+    daily_data = []
+    for row in rows:
+        rec = row['recovery']
+        exp = row['expense']
+        daily_data.append({
+            'date': row['date'],
+            'recovery': rec,
+            'expense': exp,
+            'profit': rec - exp,
+        })
+
+    # Insights — best day, worst day, average profit
+    insights = None
+    if daily_data:
+        best = max(daily_data, key=lambda d: d['profit'])
+        worst = min(daily_data, key=lambda d: d['profit'])
+        avg_profit = round(sum(d['profit'] for d in daily_data) / len(daily_data))
+        insights = {
+            'best_date': best['date'],
+            'best_profit': best['profit'],
+            'worst_date': worst['date'],
+            'worst_profit': worst['profit'],
+            'avg_profit': avg_profit,
+            'num_days': len(daily_data),
+        }
+
+    # Chart data — chronological order (ASC), capped to last N days
+    chart_dates = [d['date'] for d in reversed(daily_data)]
+    chart_recovery = [d['recovery'] for d in reversed(daily_data)]
+    chart_expense = [d['expense'] for d in reversed(daily_data)]
+    chart_profit = [d['profit'] for d in reversed(daily_data)]
+
+    chart_dates = chart_dates[-_CHART_DAY_LIMIT:]
+    chart_recovery = chart_recovery[-_CHART_DAY_LIMIT:]
+    chart_expense = chart_expense[-_CHART_DAY_LIMIT:]
+    chart_profit = chart_profit[-_CHART_DAY_LIMIT:]
+
+    # --- Build context and cache it ---
+    ctx = dict(business_name=business_name,
+               total_recovery=total_recovery,
+               total_expense=total_expense,
+               total_profit=total_profit,
+               daily_data=daily_data,
+               date_from=date_from,
+               date_to=date_to,
+               insights=insights,
+               chart_dates=chart_dates,
+               chart_recovery=chart_recovery,
+               chart_expense=chart_expense,
+               chart_profit=chart_profit)
+
+    # Evict stale entries (keep cache small)
+    for k in [k for k, (exp, _) in _reports_cache.items() if exp <= now]:
+        del _reports_cache[k]
+
+    # Safety guard — prevent unbounded growth
+    if len(_reports_cache) > 20:
+        _reports_cache.clear()
+
+    _reports_cache[cache_key] = (now + _REPORTS_CACHE_TTL, ctx)
+
+    return render_template('reports.html', **ctx)
 
 
 # --- Export to Excel ---
@@ -1244,70 +1430,190 @@ def get_reopen_time(date_str):
     return None
 
 
+def validate_database(file_path):
+    """Check that file_path is a valid SQLite DB with all required tables.
+    Returns (True, '') on success or (False, reason) on failure."""
+    try:
+        conn = sqlite3.connect(file_path)
+        cursor = conn.cursor()
+
+        # Step 1: SQLite integrity check
+        result = cursor.execute('PRAGMA integrity_check').fetchone()
+        if result[0] != 'ok':
+            conn.close()
+            return False, 'Database integrity check failed.'
+
+        # Step 2: Verify required tables exist
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('users', 'daily_entries', 'settings')"
+        )
+        found = {row[0] for row in cursor.fetchall()}
+        missing = {'users', 'daily_entries', 'settings'} - found
+        conn.close()
+
+        if missing:
+            return False, f"Missing tables: {', '.join(sorted(missing))}"
+
+        return True, ''
+    except sqlite3.DatabaseError as e:
+        return False, f'Not a valid SQLite database: {e}'
+
+
+def backup_current_db():
+    """Create a timestamped safety copy of the current database.
+    Returns the filename of the backup, e.g. accounts_old_2026-04-11_19-30.db"""
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M')
+    safety_name = f'accounts_old_{timestamp}.db'
+    safety_path = os.path.join(os.path.dirname(DATABASE), safety_name)
+    shutil.copy2(DATABASE, safety_path)
+    return safety_name
+
+
 @app.route('/backup')
 @login_required
 def backup():
-    """Create a timestamped backup of the database file."""
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    backup_filename = f'backup_{timestamp}.db'
-    backup_path = os.path.join(BACKUP_FOLDER, backup_filename)
+    """Download the current database as accounts_YYYY-MM-DD.db."""
+    now = datetime.now()
+    download_name = f'accounts_{now.strftime("%Y-%m-%d")}.db'
 
     try:
-        shutil.copy2(DATABASE, backup_path)
-        flash(f'Backup created: {backup_filename}', 'success')
-    except Exception as e:
-        flash(f'Backup failed: {str(e)}', 'error')
+        # Record backup timestamp and filename before sending the file
+        db = get_db()
+        db.execute(
+            'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+            ('last_backup_time', now.strftime('%Y-%m-%d %H:%M'))
+        )
+        db.execute(
+            'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+            ('last_backup_filename', download_name)
+        )
+        db.commit()
 
-    return redirect(url_for('settings'))
+        return send_file(
+            DATABASE,
+            as_attachment=True,
+            download_name=download_name,
+            mimetype='application/octet-stream'
+        )
+    except Exception as e:
+        flash(f'Backup download failed: {str(e)}', 'error')
+        return redirect(url_for('settings'))
+
+
+@app.route('/restore-backup', methods=['POST'])
+@login_required
+def restore_backup():
+    """Upload a .db file and replace the current database after validation."""
+    uploaded = request.files.get('backup_file')
+    if not uploaded or uploaded.filename == '':
+        flash('No file selected.', 'error')
+        return redirect(url_for('settings'))
+
+    # Step 1: Extension check
+    if not uploaded.filename.lower().endswith('.db'):
+        flash('Invalid file type. Only .db files are accepted.', 'error')
+        return redirect(url_for('settings'))
+
+    data_dir = os.path.dirname(DATABASE)
+    temp_path = os.path.join(data_dir, 'restore_temp.db')
+
+    try:
+        # Step 2: Save uploaded file to a temp location
+        uploaded.save(temp_path)
+
+        # Step 3: Validate the uploaded database
+        valid, reason = validate_database(temp_path)
+        if not valid:
+            os.remove(temp_path)
+            flash(f'Database validation failed: {reason}', 'error')
+            return redirect(url_for('settings'))
+
+        # Step 4: Close ALL active SQLite connections before replacing
+        db = g.pop('db', None)
+        if db is not None:
+            db.close()
+
+        # Step 5: Create a versioned safety backup of the current database
+        safety_name = backup_current_db()
+
+        # Step 6: Replace the active database with the validated upload
+        shutil.move(temp_path, DATABASE)
+
+        flash(
+            f'System restored successfully. Previous data saved as {safety_name}. Reloading\u2026',
+            'restore_success'
+        )
+    except Exception as e:
+        # Clean up temp file on ANY failure — never leave partial state
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        flash(f'Restore failed — please try again. ({e})', 'error')
+        return redirect(url_for('settings'))
+
+    # Redirect to /daily so the app picks up the new database
+    return redirect(url_for('daily'))
+
 
 def _pdf_styles():
-    """Shared PDF styles for all reports — professional business look."""
+    """Shared PDF styles for all reports — modern SaaS-style look."""
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
     styles = getSampleStyleSheet()
 
-    BRAND = colors.HexColor('#1a3c5e')
-    ACCENT = colors.HexColor('#2980b9')
-    LIGHT_BG = colors.HexColor('#f4f7fa')
-    GREEN_BG = colors.HexColor('#e8f6ef')
-    GREEN_ACCENT = colors.HexColor('#27ae60')
-    RED_BG = colors.HexColor('#fbeaea')
-    RED_ACCENT = colors.HexColor('#c0392b')
-    BORDER = colors.HexColor('#d5dce4')
-    TEXT_DARK = colors.HexColor('#2c3e50')
-    TEXT_MID = colors.HexColor('#5d6d7e')
+    BRAND = colors.HexColor('#1e3a5f')
+    BRAND_DARK = colors.HexColor('#162d4a')
+    ACCENT = colors.HexColor('#3b82f6')
+    LIGHT_BG = colors.HexColor('#f8fafc')
+    CARD_BG = colors.HexColor('#f1f5f9')
+    GREEN = colors.HexColor('#16a34a')
+    GREEN_BG = colors.HexColor('#ecfdf5')
+    GREEN_ACCENT = colors.HexColor('#22c55e')
+    RED = colors.HexColor('#dc2626')
+    RED_BG = colors.HexColor('#fef2f2')
+    RED_ACCENT = colors.HexColor('#ef4444')
+    BORDER = colors.HexColor('#e2e8f0')
+    TEXT_DARK = colors.HexColor('#111827')
+    TEXT_MID = colors.HexColor('#6b7280')
+    TEXT_LIGHT = colors.HexColor('#9ca3af')
 
     return {
         'base': styles,
         'colors': {
-            'brand': BRAND, 'accent': ACCENT, 'light_bg': LIGHT_BG,
-            'green_bg': GREEN_BG, 'green_accent': GREEN_ACCENT,
-            'red_bg': RED_BG, 'red_accent': RED_ACCENT,
+            'brand': BRAND, 'brand_dark': BRAND_DARK,
+            'accent': ACCENT, 'light_bg': LIGHT_BG, 'card_bg': CARD_BG,
+            'green': GREEN, 'green_bg': GREEN_BG, 'green_accent': GREEN_ACCENT,
+            'red': RED, 'red_bg': RED_BG, 'red_accent': RED_ACCENT,
             'border': BORDER, 'text_dark': TEXT_DARK, 'text_mid': TEXT_MID,
+            'text_light': TEXT_LIGHT,
         },
         'title': ParagraphStyle(
             'PDFTitle', parent=styles['Title'],
-            fontName='Helvetica-Bold', fontSize=22, leading=26,
-            textColor=BRAND, spaceAfter=2),
+            fontName='Helvetica-Bold', fontSize=20, leading=24,
+            textColor=BRAND, spaceAfter=1),
         'subtitle': ParagraphStyle(
             'PDFSub', parent=styles['Normal'],
-            fontName='Helvetica', fontSize=11, textColor=TEXT_MID,
-            spaceAfter=6),
+            fontName='Helvetica', fontSize=10, textColor=TEXT_MID,
+            spaceAfter=4, leading=14),
         'section': ParagraphStyle(
             'PDFSection', parent=styles['Heading2'],
-            fontName='Helvetica-Bold', fontSize=13, spaceBefore=20,
-            spaceAfter=10, textColor=BRAND,
+            fontName='Helvetica-Bold', fontSize=12, spaceBefore=16,
+            spaceAfter=8, textColor=BRAND,
             borderWidth=0, leftIndent=0),
+        'section_sub': ParagraphStyle(
+            'PDFSectionSub', parent=styles['Normal'],
+            fontName='Helvetica', fontSize=9, textColor=TEXT_MID,
+            spaceAfter=6),
         'stamp': ParagraphStyle(
             'PDFStamp', parent=styles['Normal'],
             fontName='Helvetica', fontSize=8, textColor=TEXT_MID,
             alignment=TA_CENTER),
         'footer': ParagraphStyle(
             'PDFFooter', parent=styles['Normal'],
-            fontName='Helvetica-Oblique', fontSize=7,
-            textColor=colors.HexColor('#aab2bd'), alignment=TA_CENTER),
+            fontName='Helvetica', fontSize=7,
+            textColor=TEXT_LIGHT, alignment=TA_CENTER),
         'balance_label': ParagraphStyle(
             'BalLabel', parent=styles['Normal'],
             fontName='Helvetica', fontSize=10, textColor=TEXT_MID),
@@ -1319,65 +1625,80 @@ def _pdf_styles():
 
 
 def _pdf_entry_table_style(c):
-    """Standard table style for entry rows."""
+    """Standard table style for entry rows — clean header + zebra stripes."""
     from reportlab.lib import colors
     from reportlab.platypus import TableStyle
     return TableStyle([
+        # Header row
         ('BACKGROUND', (0, 0), (-1, 0), c['brand']),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 0), (-1, 0), 8.5),
+        # Data rows
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 1), (-1, -1), c['text_dark']),
+        # Alignment
         ('ALIGN', (0, 0), (0, -1), 'CENTER'),
         ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        # Padding
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('TOPPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (-1, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 7),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (-1, 0), (-1, -1), 14),
         ('LEFTPADDING', (-1, 0), (-1, -1), 6),
-        ('LINEBELOW', (0, 0), (-1, 0), 1.2, c['accent']),
-        ('LINEBELOW', (0, 1), (-1, -2), 0.4, c['border']),
+        # Lines and zebra
+        ('LINEBELOW', (0, 0), (-1, 0), 1.5, c['accent']),
+        ('LINEBELOW', (0, 1), (-1, -2), 0.3, c['border']),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1),
          [colors.white, c['light_bg']]),
+        # Outer border for card-like feel
+        ('BOX', (0, 0), (-1, -1), 0.5, c['border']),
+        ('LINEBELOW', (0, -1), (-1, -1), 0.5, c['border']),
     ])
 
 
-def _pdf_totals_row_style(bg_color, accent_color):
-    """Style for a single-row totals bar."""
+def _pdf_totals_row_style(bg_color, accent_color, text_color=None):
+    """Style for a single-row totals bar with card-like appearance."""
+    from reportlab.lib import colors
     from reportlab.platypus import TableStyle
+    tc = text_color or colors.HexColor('#111827')
     return TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), bg_color),
+        ('TEXTCOLOR', (0, 0), (-1, 0), tc),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('ALIGN', (-1, 0), (-1, 0), 'RIGHT'),
-        ('TOPPADDING', (0, 0), (-1, 0), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 9),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (-1, 0), (-1, 0), 12),
-        ('LINEBELOW', (0, 0), (-1, 0), 1.5, accent_color),
+        ('TOPPADDING', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (-1, 0), (-1, 0), 14),
+        ('BOX', (0, 0), (-1, -1), 0.5, accent_color),
+        ('LINEBELOW', (0, 0), (-1, 0), 2, accent_color),
     ])
 
 
 def _pdf_header_block(elements, business_name, report_title, report_subtitle):
-    """Add logo + title + subtitle + decorative line to elements list."""
+    """Add logo + title + subtitle + accent divider to elements list."""
     from reportlab.lib import colors
     from reportlab.lib.units import mm
     from reportlab.platypus import Table, TableStyle, Paragraph, Spacer, Image
 
     s = _pdf_styles()
+    c = s['colors']
 
     logo_path = os.path.join(ASSETS_FOLDER, 'WB_icon_128x128.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=18*mm, height=18*mm)
+        logo = Image(logo_path, width=16*mm, height=16*mm)
         title_para = Paragraph(business_name, s['title'])
         sub_para = Paragraph(report_title, s['subtitle'])
         header_table = Table(
             [[logo, [title_para, sub_para]]],
-            colWidths=[22*mm, None])
+            colWidths=[20*mm, None])
         header_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -1393,14 +1714,20 @@ def _pdf_header_block(elements, business_name, report_title, report_subtitle):
     if report_subtitle:
         elements.append(Paragraph(report_subtitle, s['subtitle']))
 
-    divider = Table([['']], colWidths=[170*mm])
+    elements.append(Spacer(1, 4))
+
+    # Two-tone divider: thick accent line + thin border line
+    divider = Table([['', '']], colWidths=[60*mm, 110*mm])
     divider.setStyle(TableStyle([
-        ('LINEBELOW', (0, 0), (-1, 0), 2, s['colors']['accent']),
+        ('LINEBELOW', (0, 0), (0, 0), 2.5, c['accent']),
+        ('LINEBELOW', (1, 0), (1, 0), 0.5, c['border']),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
     elements.append(divider)
-    elements.append(Spacer(1, 12))
+    elements.append(Spacer(1, 14))
 
 
 def _pdf_footer_block(elements, extra_line=None):
@@ -1409,51 +1736,83 @@ def _pdf_footer_block(elements, extra_line=None):
     from reportlab.lib.units import mm
 
     s = _pdf_styles()
+    c = s['colors']
 
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 24))
 
     if extra_line:
         elements.append(Paragraph(extra_line, s['stamp']))
-        elements.append(Spacer(1, 6))
+        elements.append(Spacer(1, 8))
 
     divider = Table([['']], colWidths=[170*mm])
     divider.setStyle(TableStyle([
-        ('LINEABOVE', (0, 0), (-1, 0), 0.5, s['colors']['border']),
+        ('LINEABOVE', (0, 0), (-1, 0), 0.4, c['border']),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
     elements.append(divider)
-    elements.append(Spacer(1, 6))
+    elements.append(Spacer(1, 8))
 
-    gen_time = datetime.now().strftime('%d %B %Y, %I:%M %p')
+    gen_time = datetime.now().strftime('%d %B %Y, %I:%M %p').lstrip('0')
     elements.append(Paragraph(
-        f'Generated on {gen_time} &bull; Waqar &amp; Brothers Daily Account Book',
+        f'Generated on {gen_time} &nbsp;&bull;&nbsp; Waqar &amp; Brothers Daily Account Book',
         s['footer']))
 
 
+def _pdf_section_heading(elements, title, c, accent_color=None):
+    """Add a section title with a small colored left accent bar.
+    accent_color overrides the default blue bar (e.g. green for recovery).
+    """
+    from reportlab.platypus import Table, TableStyle, Spacer
+    from reportlab.lib.units import mm
+
+    bar_color = accent_color or c['accent']
+    text_color = accent_color or c['brand']
+
+    t = Table([[title]], colWidths=[170*mm])
+    t.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('TEXTCOLOR', (0, 0), (-1, -1), text_color),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (-1, -1), c['card_bg']),
+        ('BOX', (0, 0), (-1, -1), 0.5, c['border']),
+        ('LINEBEFORE', (0, 0), (0, -1), 3, bar_color),
+    ]))
+    elements.append(Spacer(1, 14))
+    elements.append(t)
+    elements.append(Spacer(1, 6))
+
+
 def _pdf_summary_table(summary_rows, c):
-    """Build styled summary table. Last row gets brand highlight."""
+    """Build styled summary table. Last row = bold closing balance hero."""
     from reportlab.lib import colors
     from reportlab.platypus import Table, TableStyle
     st = Table(summary_rows, colWidths=[330, 120])
     st.setStyle(TableStyle([
+        # Card outline
+        ('BOX', (0, 0), (-1, -1), 0.5, c['border']),
+        # Normal rows
+        ('BACKGROUND', (0, 0), (-1, -2), c['light_bg']),
         ('FONTNAME', (0, 0), (-1, -2), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -2), 10),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, -1), (-1, -1), 12),
+        ('TEXTCOLOR', (0, 0), (-1, -2), c['text_dark']),
         ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
-        ('TOPPADDING', (0, 0), (-1, -2), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -2), 8),
-        ('TOPPADDING', (0, -1), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, -1), (-1, -1), 10),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (-1, 0), (-1, -1), 12),
-        ('LEFTPADDING', (-1, 0), (-1, -1), 6),
-        ('LINEBELOW', (0, 0), (-1, -2), 0.4, c['border']),
-        ('BACKGROUND', (0, -1), (-1, -1), c['brand']),
+        ('TOPPADDING', (0, 0), (-1, -2), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -2), 9),
+        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('RIGHTPADDING', (-1, 0), (-1, -1), 14),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.3, c['border']),
+        # Closing balance hero row
+        ('BACKGROUND', (0, -1), (-1, -1), c['brand_dark']),
         ('TEXTCOLOR', (0, -1), (-1, -1), colors.white),
-        ('LINEBELOW', (0, -1), (-1, -1), 2, c['accent']),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 13),
+        ('TOPPADDING', (0, -1), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, -1), (-1, -1), 12),
     ]))
     return st
 
@@ -1565,15 +1924,15 @@ def _build_daily_pdf_bytes(db, date_str):
                       f'Daily Closing Report &mdash; {report_date.strftime("%d %B %Y")}',
                       None)
 
-    # Opening balance badge
+    # Opening balance card
     ob_data = [['Opening Balance', format_pkr(opening_balance)]]
     ob = Table(ob_data, colWidths=[330, 120])
-    ob.setStyle(_pdf_totals_row_style(c['light_bg'], c['border']))
+    ob.setStyle(_pdf_totals_row_style(c['card_bg'], c['accent']))
     elements.append(ob)
-    elements.append(Spacer(1, 14))
+    elements.append(Spacer(1, 10))
 
     # Recovery section
-    elements.append(Paragraph('Recovery Entries', s['section']))
+    _pdf_section_heading(elements, 'Recovery Entries', c, c['green'])
     if recoveries:
         data = [['#', 'Salesman', 'Amount']]
         for i, r in enumerate(recoveries, 1):
@@ -1587,12 +1946,13 @@ def _build_daily_pdf_bytes(db, date_str):
     elements.append(Spacer(1, 6))
     tr = Table([['Total Recovery', format_pkr(total_recovery)]],
                colWidths=[330, 120])
-    tr.setStyle(_pdf_totals_row_style(c['green_bg'], c['green_accent']))
+    tr.setStyle(_pdf_totals_row_style(c['green_bg'], c['green_accent'],
+                                       c['green']))
     elements.append(tr)
-    elements.append(Spacer(1, 14))
+    elements.append(Spacer(1, 10))
 
     # Expense section
-    elements.append(Paragraph('Expense Entries', s['section']))
+    _pdf_section_heading(elements, 'Expense Entries', c, c['red'])
     if expenses:
         data = [['#', 'Description', 'Amount']]
         for i, ex in enumerate(expenses, 1):
@@ -1606,21 +1966,23 @@ def _build_daily_pdf_bytes(db, date_str):
     elements.append(Spacer(1, 6))
     te = Table([['Total Expenses', format_pkr(total_expenses)]],
                colWidths=[330, 120])
-    te.setStyle(_pdf_totals_row_style(c['red_bg'], c['red_accent']))
+    te.setStyle(_pdf_totals_row_style(c['red_bg'], c['red_accent'],
+                                       c['red']))
     elements.append(te)
-    elements.append(Spacer(1, 18))
+    elements.append(Spacer(1, 12))
 
-    # Summary
-    elements.append(Paragraph('Summary', s['section']))
+    # Summary section
+    _pdf_section_heading(elements, 'Summary', c)
     summary_data = [
         ['Opening Balance', format_pkr(opening_balance)],
         ['+ Total Recovery', format_pkr(total_recovery)],
-        ['- Total Expenses', format_pkr(total_expenses)],
+        ['\u2013  Total Expenses', format_pkr(total_expenses)],
         ['= Closing Balance', format_pkr(closing_balance)],
     ]
     elements.append(_pdf_summary_table(summary_data, c))
 
-    closed_at = datetime.now().strftime('%d %B %Y, %I:%M %p')
+    closed_at = datetime.now().strftime('%d %B %Y, %I:%M %p').lstrip('0')
+    elements.append(Spacer(1, 10))
     _pdf_footer_block(elements, extra_line=f'Day closed on {closed_at}')
 
     return _build_pdf_document(elements)
@@ -1849,12 +2211,11 @@ def export_pdf():
 
         opening_balance = get_opening_balance(db, date_param)
 
-        # Opening balance badge
+        # Opening balance card
         ob = Table([['Opening Balance', format_pkr(opening_balance)]],
                    colWidths=[330, 120])
-        ob.setStyle(_pdf_totals_row_style(c['light_bg'], c['border']))
+        ob.setStyle(_pdf_totals_row_style(c['card_bg'], c['accent']))
         elements.append(ob)
-        elements.append(Spacer(1, 14))
 
         # INCOME section
         recoveries = db.execute('''
@@ -1864,7 +2225,7 @@ def export_pdf():
             ORDER BY id ASC
         ''', (date_param,)).fetchall()
 
-        elements.append(Paragraph('Income (Recovery)', s['section']))
+        _pdf_section_heading(elements, 'Income (Recovery)', c, c['green'])
 
         if recoveries:
             data = [['#', 'Salesman', 'Amount']]
@@ -1875,15 +2236,15 @@ def export_pdf():
             elements.append(t)
 
             total_recovery = sum(r['amount'] for r in recoveries)
+            elements.append(Spacer(1, 6))
             tt = Table([['Total Income', format_pkr(total_recovery)]],
                        colWidths=[330, 120])
-            tt.setStyle(_pdf_totals_row_style(c['green_bg'], c['green_accent']))
+            tt.setStyle(_pdf_totals_row_style(c['green_bg'], c['green_accent'],
+                                               c['green']))
             elements.append(tt)
         else:
             elements.append(Paragraph('No recovery entries.', s['base']['Normal']))
             total_recovery = 0
-
-        elements.append(Spacer(1, 14))
 
         # EXPENSE section
         expenses = db.execute('''
@@ -1893,7 +2254,7 @@ def export_pdf():
             ORDER BY id ASC
         ''', (date_param,)).fetchall()
 
-        elements.append(Paragraph('Expenses', s['section']))
+        _pdf_section_heading(elements, 'Expenses', c, c['red'])
 
         if expenses:
             data = [['#', 'Type', 'Description', 'Amount']]
@@ -1906,23 +2267,23 @@ def export_pdf():
             elements.append(t)
 
             total_expenses = sum(e['amount'] for e in expenses)
+            elements.append(Spacer(1, 6))
             tt = Table([['Total Expenses', format_pkr(total_expenses)]],
                        colWidths=[330, 120])
-            tt.setStyle(_pdf_totals_row_style(c['red_bg'], c['red_accent']))
+            tt.setStyle(_pdf_totals_row_style(c['red_bg'], c['red_accent'],
+                                               c['red']))
             elements.append(tt)
         else:
             elements.append(Paragraph('No expense entries.', s['base']['Normal']))
             total_expenses = 0
 
-        elements.append(Spacer(1, 18))
-
         # SUMMARY
         net = opening_balance + total_recovery - total_expenses
-        elements.append(Paragraph('Summary', s['section']))
+        _pdf_section_heading(elements, 'Summary', c)
         summary_data = [
             ['Opening Balance', format_pkr(opening_balance)],
             ['+ Total Recovery', format_pkr(total_recovery)],
-            ['- Total Expenses', format_pkr(total_expenses)],
+            ['\u2013  Total Expenses', format_pkr(total_expenses)],
             ['= Closing Balance', format_pkr(net)],
         ]
         elements.append(_pdf_summary_table(summary_data, c))
@@ -1988,16 +2349,14 @@ def export_pdf():
             elements.append(Paragraph('No entries for this month.',
                                        s['base']['Normal']))
 
-        elements.append(Spacer(1, 18))
-
         # SUMMARY
         net = opening_balance + total_income - total_expense
-        elements.append(Paragraph('Summary', s['section']))
+        _pdf_section_heading(elements, 'Summary', c)
         summary_data = [
             ['Opening Balance', format_pkr(opening_balance)],
-            ['Total Income', format_pkr(total_income)],
-            ['Total Expenses', format_pkr(total_expense)],
-            ['Closing Balance', format_pkr(net)],
+            ['+ Total Income', format_pkr(total_income)],
+            ['\u2013  Total Expenses', format_pkr(total_expense)],
+            ['= Closing Balance', format_pkr(net)],
         ]
         elements.append(_pdf_summary_table(summary_data, c))
 

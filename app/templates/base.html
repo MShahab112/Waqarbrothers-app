@@ -8,8 +8,10 @@
       rel="icon"
       href="{{ url_for('static', filename='WB_favicon.ico') }}"
     />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -57,6 +59,11 @@
           >Dashboard</a
         >
         <a
+          href="{{ url_for('reports') }}"
+          class="{% if request.endpoint == 'reports' %}active{% endif %}"
+          >Reports</a
+        >
+        <a
           href="{{ url_for('settings') }}"
           class="{% if request.endpoint == 'settings' %}active{% endif %}"
           >Settings</a
@@ -88,6 +95,16 @@
       requestAnimationFrame(function () {
         document.body.classList.add("loaded");
       });
+
+      // Auto-reload after a successful restore
+      (function () {
+        var el = document.querySelector('.flash-restore_success');
+        if (el) {
+          el.classList.add('flash-success');
+          el.textContent = 'Restoring\u2026 Please wait.';
+          setTimeout(function () { location.reload(); }, 2500);
+        }
+      })();
 
       // Theme toggle
       function toggleTheme() {
@@ -123,6 +140,21 @@
           nav.style.boxShadow = "none";
         }
       });
+
+      // Auto-dismiss flash messages after 5 seconds
+      (function () {
+        var flashes = document.querySelectorAll('.flash');
+        flashes.forEach(function (el) {
+          // Don't auto-dismiss restore messages (page will reload itself)
+          if (el.classList.contains('flash-restore_success')) return;
+          setTimeout(function () {
+            el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-8px)';
+            setTimeout(function () { el.remove(); }, 400);
+          }, 5000);
+        });
+      })();
     </script>
   </body>
 </html>

@@ -34,9 +34,48 @@
     </div>
 
     <div class="settings-extra">
-        <h2>Data Backup</h2>
-        <p class="hint" style="margin-bottom: 12px;">Click to create a backup of your database. Store it safely.</p>
-        <a href="{{ url_for('backup') }}" class="btn btn-recovery">Backup Now</a>
+        <div class="backup-highlight">
+            <h2>Download Backup</h2>
+            <p class="hint" style="margin-bottom: 12px;">Download a copy of your database file. Store it safely.</p>
+            <a href="{{ url_for('backup') }}" class="btn btn-recovery">Download Backup</a>
+            <p class="hint" style="margin-top: 10px;">
+                {% if last_backup_time %}
+                    Last Backup: <strong>{{ last_backup_time }}</strong>
+                    {% if last_backup_filename %}
+                        <br>File: <strong>{{ last_backup_filename }}</strong>
+                    {% endif %}
+                {% else %}
+                    No backup downloaded yet.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="settings-extra">
+        <h2>Restore Backup</h2>
+        <p class="hint" style="margin-bottom: 12px;">Upload a previously downloaded <code>.db</code> backup file to replace all current data. Max file size: 10 MB.</p>
+        <form id="restoreForm" method="POST" action="{{ url_for('restore_backup') }}" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="backup_file">Select Backup File (.db)</label>
+                <input type="file" id="backup_file" name="backup_file" accept=".db" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" id="restoreBtn" class="btn btn-primary">Restore Backup</button>
+            </div>
+        </form>
+        <script>
+        document.getElementById('restoreForm').addEventListener('submit', function(e) {
+            var ok = confirm(
+                'This will replace ALL current data with the uploaded backup.\n' +
+                'A timestamped copy of your current database will be saved.\n\n' +
+                'Are you sure?'
+            );
+            if (!ok) { e.preventDefault(); return; }
+            var btn = document.getElementById('restoreBtn');
+            btn.disabled = true;
+            btn.textContent = 'Restoring\u2026';
+        });
+        </script>
     </div>
 
     <div class="settings-extra">

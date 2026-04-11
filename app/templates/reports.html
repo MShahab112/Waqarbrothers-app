@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Reports — {{ business_name }}{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <div class="page-title">{{ business_name }} <span class="accent">Reports</span></div>
+        <div class="page-subtitle">
+            {% if date_from or date_to %}
+                Showing {{ date_from or 'start' }} to {{ date_to or 'today' }}
+            {% else %}
+                All-time financial summary
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Date Filter -->
+<div class="card" style="margin-bottom: 24px;">
+    <form method="GET" action="{{ url_for('reports') }}" class="filter-form">
+        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
+            <label for="from">From</label>
+            <input type="date" id="from" name="from" value="{{ date_from }}" class="filter-input">
+        </div>
+        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
+            <label for="to">To</label>
+            <input type="date" id="to" name="to" value="{{ date_to }}" class="filter-input">
+        </div>
+        <button type="submit" class="btn btn-primary" style="align-self: flex-end;">Filter</button>
+        {% if date_from or date_to %}
+        <a href="{{ url_for('reports') }}" class="btn btn-ghost" style="align-self: flex-end;">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Overall Summary Cards -->
+<div class="summary-cards">
+    <div class="summary-stat-card green">
+        <div class="stat-label">Total Recovery</div>
+        <div class="stat-value mono">{{ total_recovery|pkr }}</div>
+    </div>
+    <div class="summary-stat-card red">
+        <div class="stat-label">Total Expenses</div>
+        <div class="stat-value mono">{{ total_expense|pkr }}</div>
+    </div>
+    <div class="summary-stat-card highlight">
+        <div class="stat-label">Total Profit</div>
+        <div class="stat-value mono {% if total_profit < 0 %}negative-balance{% endif %}">{{ total_profit|pkr }}</div>
+    </div>
+</div>
+
+<!-- Insights Panel -->
+{% if insights %}
+<div class="card insights-panel" style="margin-top: 24px; padding: 20px 24px;">
+    <div class="section-title" style="margin-bottom: 16px; font-size: 14px;">Insights
+        <span style="font-weight: 400; color: var(--text3); font-size: 12px; margin-left: 6px;">{{ insights.num_days }} day{{ 's' if insights.num_days != 1 }}</span>
+    </div>
+    <div class="insights-grid">
+        <div class="insight-card insight-best">
+            <div class="insight-icon">&#9650;</div>
+            <div class="insight-body">
+                <div class="insight-label">Best Day</div>
+                <div class="insight-date">{{ insights.best_date|monthday }}</div>
+                <div class="insight-value mono recovery">{{ insights.best_profit|pkr }}</div>
+            </div>
+        </div>
+        <div class="insight-card insight-worst">
+            <div class="insight-icon">&#9660;</div>
+            <div class="insight-body">
+                <div class="insight-label">Worst Day</div>
+                <div class="insight-date">{{ insights.worst_date|monthday }}</div>
+                <div class="insight-value mono {% if insights.worst_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ insights.worst_profit|pkr }}</div>
+            </div>
+        </div>
+        <div class="insight-card insight-avg">
+            <div class="insight-icon">&#9644;</div>
+            <div class="insight-body">
+                <div class="insight-label">Avg. Daily Profit</div>
+                <div class="insight-value mono {% if insights.avg_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ insights.avg_profit|pkr }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Charts -->
+{% if daily_data %}
+<div class="chart-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px;">
+    <div class="card" style="padding: 20px;">
+        <div class="section-title" style="margin-bottom: 12px; font-size: 14px;">Daily Profit Trend</div>
+        <canvas id="profitChart" height="220"></canvas>
+    </div>
+    <div class="card" style="padding: 20px;">
+        <div class="section-title" style="margin-bottom: 12px; font-size: 14px;">Recovery vs Expenses</div>
+        <canvas id="barChart" height="220"></canvas>
+    </div>
+</div>
+
+<script>
+(function() {
+    var dates = {{ chart_dates|tojson }};
+    var recovery = {{ chart_recovery|tojson }};
+    var expense = {{ chart_expense|tojson }};
+    var profit = {{ chart_profit|tojson }};
+
+    /* Short date labels — "12 Apr" */
+    var labels = dates.map(function(d) {
+        var dt = new Date(d + 'T00:00:00');
+        return dt.getDate() + ' ' + dt.toLocaleString('en', {month: 'short'});
+    });
+
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    var textColor = isDark ? '#94a3b8' : '#64748b';
+
+    var sharedScales = {
+        x: { ticks: { color: textColor, font: { size: 11 }, maxRotation: 45 },
+             grid: { display: false } },
+        y: { ticks: { color: textColor, font: { size: 11 },
+                      callback: function(v) { return 'Rs. ' + v.toLocaleString(); } },
+             grid: { color: gridColor } }
+    };
+
+    var sharedPlugins = {
+        legend: { labels: { color: textColor, font: { size: 12 }, usePointStyle: true, padding: 16 } },
+        tooltip: {
+            callbacks: {
+                label: function(ctx) { return ctx.dataset.label + ': Rs. ' + ctx.parsed.y.toLocaleString(); }
+            }
+        }
+    };
+
+    /* Profit Line Chart */
+    new Chart(document.getElementById('profitChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Profit',
+                data: profit,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                borderWidth: 2.5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: sharedScales,
+            plugins: sharedPlugins
+        }
+    });
+
+    /* Recovery vs Expense Bar Chart */
+    new Chart(document.getElementById('barChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Recovery',
+                    data: recovery,
+                    backgroundColor: 'rgba(34,197,94,0.7)',
+                    borderColor: '#16a34a',
+                    borderWidth: 1,
+                    borderRadius: 4
+                },
+                {
+                    label: 'Expenses',
+                    data: expense,
+                    backgroundColor: 'rgba(239,68,68,0.7)',
+                    borderColor: '#dc2626',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: sharedScales,
+            plugins: sharedPlugins
+        }
+    });
+})();
+</script>
+{% endif %}
+
+<!-- Daily Summary Table -->
+<div class="card" style="margin-top: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">Daily Breakdown</div>
+        <div style="font-size: 13px; color: var(--text3);">{{ daily_data|length }} day{{ 's' if daily_data|length != 1 }}</div>
+    </div>
+
+    {% if daily_data %}
+    <table class="entries-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th style="text-align: right;">Recovery</th>
+                <th style="text-align: right;">Expenses</th>
+                <th style="text-align: right;">Profit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for day in daily_data %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('daily', date=day.date) }}" class="monthly-link">
+                        {{ day.date|monthday }}
+                    </a>
+                </td>
+                <td style="text-align: right;">
+                    <span class="mono recovery">{{ day.recovery|pkr }}</span>
+                </td>
+                <td style="text-align: right;">
+                    <span class="mono expense">{{ day.expense|pkr }}</span>
+                </td>
+                <td style="text-align: right;">
+                    <span class="mono {% if day.profit >= 0 %}recovery{% else %}negative{% endif %}">
+                        {{ day.profit|pkr }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="border-top: 2px solid var(--border2);">
+                <td><strong>Total</strong></td>
+                <td style="text-align: right;">
+                    <strong class="mono recovery">{{ total_recovery|pkr }}</strong>
+                </td>
+                <td style="text-align: right;">
+                    <strong class="mono expense">{{ total_expense|pkr }}</strong>
+                </td>
+                <td style="text-align: right;">
+                    <strong class="mono {% if total_profit >= 0 %}recovery{% else %}negative{% endif %}">
+                        {{ total_profit|pkr }}
+                    </strong>
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <div class="empty-msg">
+        <span class="empty-icon">&#128202;</span>
+        <div class="empty-text">No entries found for the selected period.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

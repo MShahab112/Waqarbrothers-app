@@ -8,14 +8,13 @@ OutputDir=C:\WaqarBrothers\installer_output
 OutputBaseFilename=WaqarBrothersSetup
 Compression=lzma
 SolidCompression=yes
-SetupIconFile=C:\WaqarBrothers\app\WB_icon_256x256.ico
+SetupIconFile=WB_icon_256x256.ico
 UninstallDisplayName=Waqar Brothers Daily Account Book
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
 WizardStyle=modern
 
 [Files]
-Source: "C:\WaqarBrothers\app\dist\WaqarBrothers.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\WaqarBrothers\app\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 
