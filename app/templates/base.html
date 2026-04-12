@@ -98,11 +98,13 @@
 
       // Auto-reload after a successful restore
       (function () {
-        var el = document.querySelector('.flash-restore_success');
+        var el = document.querySelector(".flash-restore_success");
         if (el) {
-          el.classList.add('flash-success');
-          el.textContent = 'Restoring\u2026 Please wait.';
-          setTimeout(function () { location.reload(); }, 2500);
+          el.classList.add("flash-success");
+          el.textContent = "Restoring\u2026 Please wait.";
+          setTimeout(function () {
+            location.reload();
+          }, 2500);
         }
       })();
 
@@ -143,15 +145,17 @@
 
       // Auto-dismiss flash messages after 5 seconds
       (function () {
-        var flashes = document.querySelectorAll('.flash');
+        var flashes = document.querySelectorAll(".flash");
         flashes.forEach(function (el) {
           // Don't auto-dismiss restore messages (page will reload itself)
-          if (el.classList.contains('flash-restore_success')) return;
+          if (el.classList.contains("flash-restore_success")) return;
           setTimeout(function () {
-            el.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(-8px)';
-            setTimeout(function () { el.remove(); }, 400);
+            el.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+            el.style.opacity = "0";
+            el.style.transform = "translateY(-8px)";
+            setTimeout(function () {
+              el.remove();
+            }, 400);
           }, 5000);
         });
       })();

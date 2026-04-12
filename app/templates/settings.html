@@ -1,120 +1,178 @@
-{% extends "base.html" %}
-{% block title %}Settings — Waqar &amp; Brothers{% endblock %}
-
-{% block content %}
+<!-- DEBUG VERSION 2 -->
+{% extends "base.html" %} {% block title %}Settings — Waqar &amp; Brothers{%
+endblock %} {% block content %}
 <div class="form-box">
-    <h1>Settings</h1>
+  <h1>Settings</h1>
 
-    <form method="POST" action="{{ url_for('settings') }}">
-        <div class="form-group">
-            <label for="business_name">Business Name</label>
-            <input type="text" id="business_name" name="business_name"
-                   value="{{ business_name }}" required autofocus>
-        </div>
+  <form method="POST" action="{{ url_for('settings') }}">
+    <div class="form-group">
+      <label for="business_name">Business Name</label>
+      <input
+        type="text"
+        id="business_name"
+        name="business_name"
+        value="{{ business_name }}"
+        required
+        autofocus
+      />
+    </div>
 
-        <div class="form-group">
-            <label for="opening_balance">Opening Balance (PKR)</label>
-            <input type="number" id="opening_balance" name="opening_balance"
-                   value="{{ opening_balance }}" required min="0" step="1" class="amount-input">
-            <p class="hint">This is the starting cash balance when you first
-               began using the app. It only affects the very first day.</p>
-        </div>
+    <div class="form-group">
+      <label for="opening_balance">Opening Balance (PKR)</label>
+      <input
+        type="number"
+        id="opening_balance"
+        name="opening_balance"
+        value="{{ opening_balance }}"
+        required
+        min="0"
+        step="1"
+        class="amount-input"
+      />
+      <p class="hint">
+        This is the starting cash balance when you first began using the app. It
+        only affects the very first day.
+      </p>
+    </div>
 
-        <div class="form-actions">
-            <a href="{{ url_for('daily') }}" class="btn btn-cancel">Cancel</a>
-            <button type="submit" class="btn btn-primary">Save Settings</button>
-        </div>
+    <div class="form-actions">
+      <a href="{{ url_for('daily') }}" class="btn btn-cancel">Cancel</a>
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </div>
+  </form>
+
+  <hr class="settings-divider" />
+
+  <div class="settings-extra">
+    <h2>Account</h2>
+    <p><a href="{{ url_for('change_password') }}">Change Password</a></p>
+  </div>
+
+  <div class="settings-extra">
+    <div class="backup-highlight">
+      <h2>Download Backup</h2>
+      <p class="hint" style="margin-bottom: 12px">
+        Download a copy of your database file. Store it safely.
+      </p>
+      <a href="{{ url_for('backup') }}" class="btn btn-recovery"
+        >Download Backup</a
+      >
+      <p class="hint" style="margin-top: 10px">
+        {% if last_backup_time %} Last Backup:
+        <strong>{{ last_backup_time }}</strong>
+        {% if last_backup_filename %}
+        <br />File: <strong>{{ last_backup_filename }}</strong>
+        {% endif %} {% else %} No backup downloaded yet. {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="settings-extra">
+    <h2>Restore Backup</h2>
+    <p class="hint" style="margin-bottom: 12px">
+      Upload a previously downloaded <code>.db</code> backup file to replace all
+      current data. Max file size: 10 MB.
+    </p>
+    <form
+      id="restoreForm"
+      method="POST"
+      action="{{ url_for('restore_backup') }}"
+      enctype="multipart/form-data"
+    >
+      <div class="form-group">
+        <label for="backup_file">Select Backup File (.db)</label>
+        <input
+          type="file"
+          id="backup_file"
+          name="backup_file"
+          accept=".db"
+          required
+        />
+      </div>
+      <div class="form-actions">
+        <button type="submit" id="restoreBtn" class="btn btn-primary">
+          Restore Backup
+        </button>
+      </div>
     </form>
-
-    <hr class="settings-divider">
-
-    <div class="settings-extra">
-        <h2>Account</h2>
-        <p><a href="{{ url_for('change_password') }}">Change Password</a></p>
-    </div>
-
-    <div class="settings-extra">
-        <div class="backup-highlight">
-            <h2>Download Backup</h2>
-            <p class="hint" style="margin-bottom: 12px;">Download a copy of your database file. Store it safely.</p>
-            <a href="{{ url_for('backup') }}" class="btn btn-recovery">Download Backup</a>
-            <p class="hint" style="margin-top: 10px;">
-                {% if last_backup_time %}
-                    Last Backup: <strong>{{ last_backup_time }}</strong>
-                    {% if last_backup_filename %}
-                        <br>File: <strong>{{ last_backup_filename }}</strong>
-                    {% endif %}
-                {% else %}
-                    No backup downloaded yet.
-                {% endif %}
-            </p>
-        </div>
-    </div>
-
-    <div class="settings-extra">
-        <h2>Restore Backup</h2>
-        <p class="hint" style="margin-bottom: 12px;">Upload a previously downloaded <code>.db</code> backup file to replace all current data. Max file size: 10 MB.</p>
-        <form id="restoreForm" method="POST" action="{{ url_for('restore_backup') }}" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="backup_file">Select Backup File (.db)</label>
-                <input type="file" id="backup_file" name="backup_file" accept=".db" required>
-            </div>
-            <div class="form-actions">
-                <button type="submit" id="restoreBtn" class="btn btn-primary">Restore Backup</button>
-            </div>
-        </form>
-        <script>
-        document.getElementById('restoreForm').addEventListener('submit', function(e) {
-            var ok = confirm(
-                'This will replace ALL current data with the uploaded backup.\n' +
-                'A timestamped copy of your current database will be saved.\n\n' +
-                'Are you sure?'
-            );
-            if (!ok) { e.preventDefault(); return; }
-            var btn = document.getElementById('restoreBtn');
-            btn.disabled = true;
-            btn.textContent = 'Restoring\u2026';
+    <script>
+      document
+        .getElementById("restoreForm")
+        .addEventListener("submit", function (e) {
+          var ok = confirm(
+            "This will replace ALL current data with the uploaded backup.\n" +
+              "A timestamped copy of your current database will be saved.\n\n" +
+              "Are you sure?",
+          );
+          if (!ok) {
+            e.preventDefault();
+            return;
+          }
+          var btn = document.getElementById("restoreBtn");
+          btn.disabled = true;
+          btn.textContent = "Restoring\u2026";
         });
-        </script>
-    </div>
+    </script>
+  </div>
 
-    <div class="settings-extra">
-        <h2>Security PIN</h2>
-        <p class="hint" style="margin-bottom: 12px;">
-            The 4-digit PIN is required to re-open a closed day. Default is
-            <code>1234</code> &mdash; please change it. You must enter your
-            login password to confirm this change.
-        </p>
-        <form method="POST" action="{{ url_for('change_pin') }}" autocomplete="off">
-            <div class="form-group">
-                <label for="current_password">Login Password</label>
-                <input type="password" id="current_password" name="current_password"
-                       required autocomplete="current-password">
-            </div>
-            <div class="form-group">
-                <label for="new_pin">New 4-digit PIN</label>
-                <input type="password" id="new_pin" name="new_pin"
-                       required inputmode="numeric" pattern="\d{4}"
-                       maxlength="4" minlength="4" autocomplete="new-password">
-            </div>
-            <div class="form-group">
-                <label for="confirm_pin">Confirm New PIN</label>
-                <input type="password" id="confirm_pin" name="confirm_pin"
-                       required inputmode="numeric" pattern="\d{4}"
-                       maxlength="4" minlength="4" autocomplete="new-password">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Update PIN</button>
-            </div>
-        </form>
-    </div>
+  <div class="settings-extra">
+    <h2>Security PIN</h2>
+    <p class="hint" style="margin-bottom: 12px">
+      The 4-digit PIN is required to re-open a closed day. Default is
+      <code>1234</code> &mdash; please change it. You must enter your login
+      password to confirm this change.
+    </p>
+    <form method="POST" action="{{ url_for('change_pin') }}" autocomplete="off">
+      <div class="form-group">
+        <label for="current_password">Login Password</label>
+        <input
+          type="password"
+          id="current_password"
+          name="current_password"
+          required
+          autocomplete="current-password"
+        />
+      </div>
+      <div class="form-group">
+        <label for="new_pin">New 4-digit PIN</label>
+        <input
+          type="password"
+          id="new_pin"
+          name="new_pin"
+          required
+          inputmode="numeric"
+          pattern="\d{4}"
+          maxlength="4"
+          minlength="4"
+          autocomplete="new-password"
+        />
+      </div>
+      <div class="form-group">
+        <label for="confirm_pin">Confirm New PIN</label>
+        <input
+          type="password"
+          id="confirm_pin"
+          name="confirm_pin"
+          required
+          inputmode="numeric"
+          pattern="\d{4}"
+          maxlength="4"
+          minlength="4"
+          autocomplete="new-password"
+        />
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Update PIN</button>
+      </div>
+    </form>
+  </div>
 
-    <hr class="settings-divider">
+  <hr class="settings-divider" />
 
-    <div class="settings-extra">
-        <h2>About</h2>
-        <p>Waqar &amp; Brothers — Daily Account Book</p>
-        <p>Version: 1.0 (Phase 1)</p>
-    </div>
+  <div class="settings-extra">
+    <h2>About</h2>
+    <p>Waqar &amp; Brothers — Daily Account Book</p>
+    <p>Version: {{ current_version }}</p>
+  </div>
 </div>
 {% endblock %}

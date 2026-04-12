@@ -397,6 +397,101 @@ a:hover {
    FLASH / ALERT MESSAGES
    ============================================================ */
 
+.update-banner {
+  max-width: 960px;
+  margin: 12px auto 0;
+  padding: 0 24px;
+  animation: fadeIn 0.35s ease-out;
+}
+
+.update-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.12),
+    rgba(139, 92, 246, 0.12)
+  );
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-left: 4px solid #3b82f6;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.update-banner-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text1);
+  margin-bottom: 2px;
+}
+
+.update-banner-msg {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+.update-banner-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .update-banner-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .update-banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.update-last-checked {
+  font-size: 12px;
+  color: var(--text3, #6b7280);
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+.update-result {
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  line-height: 1.5;
+  min-height: 0;
+}
+.update-result:empty {
+  padding: 0;
+}
+.update-result-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #16a34a;
+}
+.update-result-new {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #2563eb;
+}
+.update-result-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #dc2626;
+}
+
 .flash-container {
   max-width: 960px;
   margin: 12px auto;
@@ -1428,70 +1523,228 @@ input.amount-input {
 .insights-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+  gap: 16px;
 }
 
 .insight-card {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border1);
-  background: var(--card-bg);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  align-items: center;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--card-bg), var(--card-bg-soft, rgba(0, 0, 0, 0.02)));
+  border: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Soft radial highlight in top-right corner */
+.insight-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.4), transparent 60%);
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .insight-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-elevated);
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 16px 35px rgba(0, 0, 0, 0.12);
 }
 
+.insight-card .insight-icon {
+  transition: transform 0.25s ease;
+}
+
+.insight-card:hover .insight-icon {
+  transform: scale(1.08);
+}
+
+/* Gradient left accent — applied via border-image */
+.insight-best {
+  background: #ecfdf5;
+}
+.insight-worst {
+  background: #fef2f2;
+}
+.insight-avg {
+  background: #eff6ff;
+}
+
+/* Dark-mode overrides — keep the color cue without blinding whites */
+[data-theme="dark"] .insight-card  { border: none; }
+[data-theme="dark"] .insight-best  { background: rgba(34, 197, 94, 0.10); }
+[data-theme="dark"] .insight-worst { background: rgba(239, 68, 68, 0.10); }
+[data-theme="dark"] .insight-avg   { background: rgba(59, 130, 246, 0.10); }
+
+/* Icon badge — neutral soft circle, arrow color carries the cue */
 .insight-icon {
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 15px;
   line-height: 1;
-  margin-top: 2px;
   flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.05);
 }
 
-.insight-best .insight-icon {
-  color: var(--green);
+[data-theme="dark"] .insight-icon {
+  background: rgba(255, 255, 255, 0.08);
 }
-.insight-worst .insight-icon {
-  color: var(--red);
-}
-.insight-avg .insight-icon {
-  color: var(--accent);
-}
+
+.insight-best  .insight-icon { color: #16a34a; }
+.insight-worst .insight-icon { color: #dc2626; }
+.insight-avg   .insight-icon { color: #2563eb; }
 
 .insight-body {
   min-width: 0;
+  flex: 1;
 }
 
 .insight-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   color: var(--text3);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .insight-date {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text2);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .insight-value {
-  font-size: 16px;
+  font-size: 23px;
   font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text1);
+  animation: insightFadeUp 0.4s ease;
+}
+
+.insight-best  .insight-value { color: #16a34a; }
+.insight-worst .insight-value { color: #dc2626; }
+.insight-avg   .insight-value { color: #2563eb; }
+
+@keyframes insightFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Body/label/date should sit above the radial highlight overlay */
+.insight-body {
+  position: relative;
+  z-index: 1;
+}
+.insight-icon {
+  position: relative;
+  z-index: 1;
 }
 
 @media (max-width: 640px) {
   .insights-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Currency display: muted "Rs." prefix + bold amount.
+   Applied by JS after count-up completes on any [data-value] element. */
+.currency-prefix {
+  font-size: 0.6em;
+  font-weight: 500;
+  opacity: 0.6;
+  margin-right: 4px;
+  letter-spacing: 0;
+}
+
+.currency-amount {
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+/* Message shown when only a single day of data is available */
+.chart-insufficient {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+  padding: 16px;
+}
+
+/* Smooth canvas fade-in on load (does not touch width/height) */
+.chart-container canvas {
+  opacity: 0;
+  animation: chartFade 0.5s ease forwards;
+  animation-delay: 0.15s;
+}
+
+@keyframes chartFade {
+  to { opacity: 1; }
+}
+
+/* Shimmer skeleton shown until Chart.js finishes rendering */
+.chart-skeleton {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.10) 25%,
+    rgba(148, 163, 184, 0.22) 37%,
+    rgba(148, 163, 184, 0.10) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.2s infinite linear;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Empty state for missing chart data */
+.empty-state {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  gap: 4px;
+}
+
+.empty-state-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+
+.empty-state-text {
+  font-size: 14px;
+  color: var(--text2);
 }
 
 /* ============================================================
@@ -1901,10 +2154,26 @@ input.amount-input {
 .chart-grid {
   margin-top: 24px;
 }
+/* min-width: 0 on grid children stops the canvas's intrinsic size from
+   pushing the grid track wider, which otherwise feeds Chart.js's
+   ResizeObserver and triggers an infinite resize loop. */
+.chart-grid > .card {
+  min-width: 0;
+  overflow: hidden;
+}
 @media (max-width: 900px) {
   .chart-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Fixed-height chart container — Chart.js needs a constrained parent
+   when maintainAspectRatio: false. Container is locked; canvas sizing
+   is left to Chart.js so the chart actually renders. */
+.chart-container {
+  position: relative;
+  height: 300px;
+  width: 100%;
 }
 
 @media (max-width: 640px) {

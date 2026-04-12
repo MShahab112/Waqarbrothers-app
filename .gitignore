@@ -28,3 +28,6 @@ backups/
 
 # Claude / local config
 .claude/
+
+# Secret key config
+app/config.py

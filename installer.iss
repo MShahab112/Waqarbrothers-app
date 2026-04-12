@@ -1,6 +1,6 @@
 [Setup]
 AppName=Waqar Brothers Daily Account Book
-AppVersion=1.0
+AppVersion=1.4
 AppPublisher=Waqar & Brothers
 DefaultDirName={localappdata}\WaqarBrothers
 DefaultGroupName=Waqar Brothers
