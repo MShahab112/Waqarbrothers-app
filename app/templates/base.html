@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
     <link
@@ -22,7 +22,7 @@
       /* Smooth page transition — prevent FOUC */
       body {
         opacity: 0;
-        transition: opacity 0.3s ease;
+        transition: opacity 0.35s ease;
       }
       body.loaded {
         opacity: 1;
@@ -39,7 +39,7 @@
   <body>
     {% if session.get('user_id') %}
     <!-- Navigation bar -->
-    <nav class="navbar">
+    <nav class="navbar" id="mainNavbar">
       <a href="{{ url_for('daily') }}" class="brand">
         <img
           src="{{ url_for('static', filename='WB_icon_128x128.png') }}"
@@ -133,15 +133,24 @@
         }, 600);
       });
 
-      window.addEventListener("scroll", function () {
-        const nav = document.querySelector(".navbar");
-        if (window.scrollY > 10) {
-          nav.style.boxShadow = "0 8px 30px rgba(0,0,0,0.35)";
-          nav.style.backdropFilter = "blur(28px)";
-        } else {
-          nav.style.boxShadow = "none";
-        }
-      });
+      // Navbar scroll behavior — fade in shadow on scroll
+      (function () {
+        var nav = document.getElementById("mainNavbar");
+        if (!nav) return;
+        var scrolled = false;
+        window.addEventListener("scroll", function () {
+          var isScrolled = window.scrollY > 8;
+          if (isScrolled !== scrolled) {
+            scrolled = isScrolled;
+            if (scrolled) {
+              nav.style.boxShadow =
+                "0 1px 6px rgba(0,0,0,0.08), 0 8px 32px rgba(0,0,0,0.12)";
+            } else {
+              nav.style.boxShadow = "none";
+            }
+          }
+        });
+      })();
 
       // Auto-dismiss flash messages after 5 seconds
       (function () {

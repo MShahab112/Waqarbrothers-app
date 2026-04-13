@@ -102,7 +102,7 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 ASSETS_FOLDER = assets_path()
 
 # Current app version. Bump this on every release.
-CURRENT_VERSION = "1.4"
+CURRENT_VERSION = "1.5"
 
 
 def _version_tuple(v):

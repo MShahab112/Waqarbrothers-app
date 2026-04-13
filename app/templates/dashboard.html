@@ -17,33 +17,35 @@
 </div>
 
 <!-- Summary Cards -->
-<div class="dashboard-grid">
-    <div class="card dashboard-stat">
+<div class="summary-cards">
+    <div class="summary-stat-card green">
         <div class="stat-label">Total Income</div>
-        <div class="stat-value mono recovery">{{ total_income|pkr }}</div>
+        <div class="stat-value mono">{{ total_income|pkr }}</div>
     </div>
-    <div class="card dashboard-stat">
+    <div class="summary-stat-card red">
         <div class="stat-label">Total Expenses</div>
-        <div class="stat-value mono expense">{{ total_expense|pkr }}</div>
+        <div class="stat-value mono">{{ total_expense|pkr }}</div>
     </div>
-    <div class="card dashboard-stat">
+    <div class="summary-stat-card highlight">
         <div class="stat-label">Net Profit</div>
-        <div class="stat-value mono {% if net_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ net_profit|pkr }}</div>
+        <div class="stat-value mono {% if net_profit < 0 %}negative-balance{% endif %}">{{ net_profit|pkr }}</div>
     </div>
 </div>
 
 <!-- Best / Worst Month -->
 {% if best_month and worst_month %}
-<div class="dashboard-grid" style="margin-top: 20px;">
-    <div class="card dashboard-stat">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px;">
+    <div class="card" style="padding: 28px; text-align: center; position: relative; overflow: hidden;">
+        <div style="font-size: 32px; margin-bottom: 10px;">🏆</div>
         <div class="stat-label">Best Month</div>
-        <div class="stat-month">{{ best_month.label }}</div>
-        <div class="stat-value mono recovery" style="font-size: 18px;">{{ best_month.profit|pkr }}</div>
+        <div class="stat-month" style="margin-top: 8px;">{{ best_month.label }}</div>
+        <div class="stat-value mono" style="font-size: 22px; color: var(--green); margin-top: 6px;">{{ best_month.profit|pkr }}</div>
     </div>
-    <div class="card dashboard-stat">
+    <div class="card" style="padding: 28px; text-align: center; position: relative; overflow: hidden;">
+        <div style="font-size: 32px; margin-bottom: 10px;">📉</div>
         <div class="stat-label">Worst Month</div>
-        <div class="stat-month">{{ worst_month.label }}</div>
-        <div class="stat-value mono {% if worst_month.profit >= 0 %}recovery{% else %}negative{% endif %}" style="font-size: 18px;">{{ worst_month.profit|pkr }}</div>
+        <div class="stat-month" style="margin-top: 8px;">{{ worst_month.label }}</div>
+        <div class="stat-value mono {% if worst_month.profit >= 0 %}recovery{% else %}negative{% endif %}" style="font-size: 22px; margin-top: 6px;">{{ worst_month.profit|pkr }}</div>
     </div>
 </div>
 {% endif %}
@@ -52,20 +54,20 @@
 {% if monthly_data|length > 1 %}
 <div class="card" style="margin-top: 24px;">
     <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">Monthly Trends</div>
+        <div class="section-title">📊 Monthly Trends</div>
     </div>
-    <div style="padding: 12px 18px;">
-        <canvas id="monthlyChart" height="280"></canvas>
+    <div class="chart-container">
+        <canvas id="monthlyChart"></canvas>
     </div>
 </div>
 {% endif %}
 
 <!-- Charts Row: Expenses by Category (list + pie) -->
 {% if category_totals %}
-<div class="dashboard-grid" style="margin-top: 24px;">
-    <div class="card dashboard-stat" style="padding: 20px;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+    <div class="card" style="padding: 24px;">
         <div class="section-header" style="border-top: none; padding-top: 0;">
-            <div class="section-title">Expenses by Category</div>
+            <div class="section-title">💰 Expenses by Category</div>
         </div>
         {% for cat in category_totals %}
         <div class="summary-row">
@@ -74,11 +76,11 @@
         </div>
         {% endfor %}
     </div>
-    <div class="card dashboard-stat" style="padding: 20px;">
+    <div class="card" style="padding: 24px;">
         <div class="section-header" style="border-top: none; padding-top: 0;">
-            <div class="section-title">Expense Distribution</div>
+            <div class="section-title">📈 Expense Distribution</div>
         </div>
-        <div style="padding: 12px 0; max-width: 320px; margin: 0 auto;">
+        <div style="padding: 12px 0; max-width: 300px; margin: 0 auto;">
             <canvas id="categoryChart"></canvas>
         </div>
     </div>
@@ -88,26 +90,26 @@
 <!-- Monthly Breakdown -->
 <div class="card" style="margin-top: 24px;">
     <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">Monthly Breakdown</div>
+        <div class="section-title">📋 Monthly Breakdown</div>
     </div>
 
     {% if monthly_data %}
     <!-- Column Headers -->
-    <div class="entry-row" style="border: none; background: none; padding: 8px 18px; margin-bottom: 0;">
-        <div class="monthly-col-label" style="flex: 1;">Month</div>
-        <div class="monthly-col-label">Income</div>
-        <div class="monthly-col-label">Expense</div>
-        <div class="monthly-col-label">Profit</div>
+    <div class="monthly-breakdown-row monthly-breakdown-header">
+        <div class="monthly-col-label" style="text-align: left;">Month</div>
+        <div class="monthly-col-label" style="text-align: right;">Income</div>
+        <div class="monthly-col-label" style="text-align: right;">Expense</div>
+        <div class="monthly-col-label" style="text-align: right;">Profit</div>
     </div>
 
         {% for item in monthly_data %}
-        <div class="entry-row">
-            <div class="monthly-month" style="flex: 1;">
+        <div class="monthly-breakdown-row" style="background: none;">
+            <div class="monthly-month">
                 <a href="{{ url_for('daily', month=item.month, year=item.year) }}" class="monthly-link">{{ item.label }}</a>
             </div>
-            <div class="entry-amount recovery mono">{{ item.income|pkr }}</div>
-            <div class="entry-amount expense mono">{{ item.expense|pkr }}</div>
-            <div class="entry-amount mono {% if item.profit >= 0 %}recovery{% else %}negative{% endif %}">{{ item.profit|pkr }}</div>
+            <div class="entry-amount mono" style="color: var(--text); font-weight: 500; text-align: right;">{{ item.income|pkr }}</div>
+            <div class="entry-amount mono expense" style="font-weight: 500; text-align: right;">{{ item.expense|pkr }}</div>
+            <div class="entry-amount mono {% if item.profit >= 0 %}recovery{% else %}negative{% endif %}" style="text-align: right;">{{ item.profit|pkr }}</div>
         </div>
         {% endfor %}
 
@@ -129,11 +131,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // Shared chart defaults for dark/light theme
-var textColor = getComputedStyle(document.documentElement).getPropertyValue('--text2').trim() || '#94a3b8';
-var gridColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#333';
+var cs = getComputedStyle(document.documentElement);
+var textColor = cs.getPropertyValue('--text2').trim() || '#94a3b8';
+var gridColor = cs.getPropertyValue('--border').trim() || '#333';
+var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
 Chart.defaults.color = textColor;
 Chart.defaults.borderColor = gridColor;
+Chart.defaults.font.family = "'Inter', 'SF Pro Display', system-ui, sans-serif";
 
 {% if monthly_data|length > 1 %}
 // --- Monthly Trends Line Chart ---
@@ -143,6 +148,16 @@ Chart.defaults.borderColor = gridColor;
     var expenseData = [{% for item in monthly_data %}{{ item.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
 
     var ctx = document.getElementById('monthlyChart').getContext('2d');
+
+    // Gradient fills
+    var greenGrad = ctx.createLinearGradient(0, 0, 0, 320);
+    greenGrad.addColorStop(0, isDark ? 'rgba(48, 209, 88, 0.20)' : 'rgba(36, 138, 61, 0.12)');
+    greenGrad.addColorStop(1, 'rgba(48, 209, 88, 0)');
+
+    var redGrad = ctx.createLinearGradient(0, 0, 0, 320);
+    redGrad.addColorStop(0, isDark ? 'rgba(255, 69, 58, 0.20)' : 'rgba(215, 0, 21, 0.08)');
+    redGrad.addColorStop(1, 'rgba(255, 69, 58, 0)');
+
     new Chart(ctx, {
         type: 'line',
         data: {
@@ -151,44 +166,77 @@ Chart.defaults.borderColor = gridColor;
                 {
                     label: 'Income',
                     data: incomeData,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.3,
+                    borderColor: isDark ? '#30D158' : '#248A3D',
+                    backgroundColor: greenGrad,
+                    borderWidth: 2.5,
+                    tension: 0.4,
                     fill: true,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#22c55e'
+                    pointRadius: 5,
+                    pointBackgroundColor: isDark ? '#30D158' : '#248A3D',
+                    pointBorderColor: isDark ? '#1c1c1e' : '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7
                 },
                 {
                     label: 'Expenses',
                     data: expenseData,
-                    borderColor: '#ef4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.3,
+                    borderColor: isDark ? '#FF453A' : '#D70015',
+                    backgroundColor: redGrad,
+                    borderWidth: 2.5,
+                    tension: 0.4,
                     fill: true,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#ef4444'
+                    pointRadius: 5,
+                    pointBackgroundColor: isDark ? '#FF453A' : '#D70015',
+                    pointBorderColor: isDark ? '#1c1c1e' : '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { position: 'top' },
+                legend: {
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 20,
+                        font: { size: 13, weight: '600' }
+                    }
+                },
                 tooltip: {
+                    backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
+                    titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
+                    bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                    borderWidth: 1,
+                    cornerRadius: 12,
+                    padding: 14,
+                    displayColors: true,
+                    usePointStyle: true,
                     callbacks: {
                         label: function(c) {
-                            return c.dataset.label + ': PKR ' + c.parsed.y.toLocaleString('en-IN');
+                            return ' ' + c.dataset.label + ':  PKR ' + c.parsed.y.toLocaleString('en-IN');
                         }
                     }
                 }
             },
             scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 12, weight: '500' } }
+                },
                 y: {
                     beginAtZero: true,
+                    grid: {
+                        color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+                        drawBorder: false
+                    },
                     ticks: {
+                        font: { size: 12 },
                         callback: function(v) { return 'PKR ' + v.toLocaleString('en-IN'); }
                     }
                 }
@@ -199,37 +247,61 @@ Chart.defaults.borderColor = gridColor;
 {% endif %}
 
 {% if category_totals %}
-// --- Category Pie Chart ---
+// --- Category Doughnut Chart ---
 (function() {
     var catLabels = [{% for cat in category_totals %}'{{ cat.name }}'{% if not loop.last %}, {% endif %}{% endfor %}];
     var catData = [{% for cat in category_totals %}{{ cat.amount }}{% if not loop.last %}, {% endif %}{% endfor %}];
-    var catColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+    var catColors = [
+        isDark ? '#FF453A' : '#D70015',
+        isDark ? '#FF9F0A' : '#C93400',
+        isDark ? '#FFD60A' : '#B25000',
+        isDark ? '#30D158' : '#248A3D',
+        isDark ? '#0A84FF' : '#007AFF',
+        isDark ? '#5E5CE6' : '#5856D6',
+        isDark ? '#BF5AF2' : '#AF52DE',
+        isDark ? '#64D2FF' : '#32ADE6'
+    ];
 
     var ctx2 = document.getElementById('categoryChart').getContext('2d');
     new Chart(ctx2, {
-        type: 'pie',
+        type: 'doughnut',
         data: {
             labels: catLabels,
             datasets: [{
                 data: catData,
                 backgroundColor: catColors.slice(0, catLabels.length),
-                borderWidth: 2,
-                borderColor: getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || '#1a1a2e'
+                borderWidth: 3,
+                borderColor: isDark ? '#1c1c1e' : '#ffffff',
+                hoverBorderColor: isDark ? '#2c2c2e' : '#f2f2f7',
+                hoverOffset: 6
             }]
         },
         options: {
             responsive: true,
+            cutout: '55%',
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { padding: 16 }
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 16,
+                        font: { size: 12, weight: '500' }
+                    }
                 },
                 tooltip: {
+                    backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
+                    titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
+                    bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                    borderWidth: 1,
+                    cornerRadius: 12,
+                    padding: 14,
                     callbacks: {
                         label: function(c) {
                             var total = c.dataset.data.reduce(function(a, b) { return a + b; }, 0);
                             var pct = ((c.parsed / total) * 100).toFixed(1);
-                            return c.label + ': PKR ' + c.parsed.toLocaleString('en-IN') + ' (' + pct + '%)';
+                            return ' ' + c.label + ':  PKR ' + c.parsed.toLocaleString('en-IN') + ' (' + pct + '%)';
                         }
                     }
                 }
