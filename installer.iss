@@ -1,6 +1,6 @@
 [Setup]
 AppName=Waqar Brothers Daily Account Book
-AppVersion=1.5
+AppVersion=1.6
 AppPublisher=Waqar & Brothers
 DefaultDirName={localappdata}\WaqarBrothers
 DefaultGroupName=Waqar Brothers
@@ -15,7 +15,7 @@ DisableProgramGroupPage=yes
 WizardStyle=modern
 
 [Files]
-Source: "C:\WaqarBrothers\app\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\WaqarBrothers\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 
 [Dirs]

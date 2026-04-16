@@ -784,6 +784,30 @@ textarea::placeholder {
   opacity: 0.7;
 }
 
+/* Suppress browser-native "X" clear + reveal icons inside inputs.
+   Edge/IE show an X on text/password fields (::-ms-clear / ::-ms-reveal);
+   Chromium shows one on search + date inputs. We handle clearing in JS
+   where it's needed, so the native chrome just adds visual noise. */
+input::-ms-clear,
+input::-ms-reveal {
+  display: none;
+  width: 0;
+  height: 0;
+}
+input::-webkit-search-cancel-button,
+input::-webkit-search-decoration,
+input::-webkit-clear-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+input[type="date"]::-webkit-clear-button,
+input[type="date"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 input.amount-input {
   font-family: "SF Mono", "Space Mono", monospace;
   font-size: 22px;
@@ -1334,6 +1358,178 @@ input.amount-input {
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 28px;
+}
+
+.summary-cards.summary-cards-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.summary-cards.summary-cards-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* --- Category color system (fixed hues, consistent across list + chart) --- */
+:root {
+  --cat-food:      #10B981; /* Green  */
+  --cat-transport: #F59E0B; /* Orange */
+  --cat-bank:      #3B82F6; /* Blue   */
+  --cat-utility:   #06B6D4; /* Cyan   */
+  --cat-zakat:     #8B5CF6; /* Purple */
+  --cat-drawing:   #EC4899; /* Pink   */
+  --cat-other:     #6B7280; /* Gray   */
+
+  --amt-recovery:  #22C55E;
+  --amt-expense:   #EF4444;
+  --amt-bank:      #3B82F6;
+  --amt-online:    #8B5CF6;
+  --amt-neutral:   #6B7280;
+
+  --medal-gold:    #FFD700;
+  --medal-silver:  #C0C0C0;
+  --medal-bronze:  #CD7F32;
+}
+
+/* Colored dot prefix for category rows */
+.cat-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+}
+.cat-food      .cat-dot, .cat-dot.cat-food      { background: var(--cat-food); }
+.cat-transport .cat-dot, .cat-dot.cat-transport { background: var(--cat-transport); }
+.cat-bank      .cat-dot, .cat-dot.cat-bank      { background: var(--cat-bank); }
+.cat-utility   .cat-dot, .cat-dot.cat-utility   { background: var(--cat-utility); }
+.cat-zakat     .cat-dot, .cat-dot.cat-zakat     { background: var(--cat-zakat); }
+.cat-drawing   .cat-dot, .cat-dot.cat-drawing   { background: var(--cat-drawing); }
+.cat-other     .cat-dot, .cat-dot.cat-other     { background: var(--cat-other); }
+
+/* Category row — label + amount share the category's hue */
+.cat-row .summary-label       { font-weight: 600; }
+.cat-row.cat-food      .summary-amount { color: var(--cat-food); }
+.cat-row.cat-transport .summary-amount { color: var(--cat-transport); }
+.cat-row.cat-bank      .summary-amount { color: var(--cat-bank); }
+.cat-row.cat-utility   .summary-amount { color: var(--cat-utility); }
+.cat-row.cat-zakat     .summary-amount { color: var(--cat-zakat); }
+.cat-row.cat-drawing   .summary-amount { color: var(--cat-drawing); }
+.cat-row.cat-other     .summary-amount { color: var(--cat-other); }
+
+/* Number color utility classes — use these when .recovery/.expense are too generic */
+.amt-recovery { color: var(--amt-recovery); }
+.amt-expense  { color: var(--amt-expense);  }
+.amt-bank     { color: var(--amt-bank);     }
+.amt-online   { color: var(--amt-online);   }
+.amt-neutral  { color: var(--amt-neutral);  }
+
+/* Payment-type rows in Bank vs Cash summary */
+.pay-row.pay-cash   .summary-label,
+.pay-row.pay-cash   .summary-amount { color: var(--amt-recovery); }
+.pay-row.pay-online .summary-label,
+.pay-row.pay-online .summary-amount { color: var(--amt-online); }
+.pay-row.pay-bank   .summary-label,
+.pay-row.pay-bank   .summary-amount { color: var(--amt-bank); }
+.pay-row .summary-label { font-weight: 600; }
+
+.pay-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+.pay-dot.cash   { background: var(--amt-recovery); }
+.pay-dot.online { background: var(--amt-online); }
+.pay-dot.bank   { background: var(--amt-bank); }
+
+/* Top Salesmen — medal accent on insight cards */
+.insight-card.medal-1 {
+  border-color: rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.25),
+              0 8px 24px rgba(255, 215, 0, 0.08);
+}
+.insight-card.medal-2 {
+  border-color: rgba(192, 192, 192, 0.55);
+  box-shadow: 0 0 0 1px rgba(192, 192, 192, 0.25),
+              0 8px 24px rgba(192, 192, 192, 0.08);
+}
+.insight-card.medal-3 {
+  border-color: rgba(205, 127, 50, 0.55);
+  box-shadow: 0 0 0 1px rgba(205, 127, 50, 0.25),
+              0 8px 24px rgba(205, 127, 50, 0.08);
+}
+.insight-card.medal-1 .insight-label { color: var(--medal-gold); }
+.insight-card.medal-2 .insight-label { color: var(--medal-silver); }
+.insight-card.medal-3 .insight-label { color: var(--medal-bronze); }
+.insight-card.medal-1 .insight-value,
+.insight-card.medal-2 .insight-value,
+.insight-card.medal-3 .insight-value {
+  color: var(--amt-recovery);
+}
+
+/* Bank Transfer totals always render blue, never red */
+.bt-amount, .mono.bank-transfer { color: var(--amt-bank); }
+
+/* --- Salesmen management page --- */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.status-badge.status-active {
+  background: rgba(48, 209, 88, 0.15);
+  color: var(--green, #30D158);
+  border: 1px solid rgba(48, 209, 88, 0.35);
+}
+.status-badge.status-inactive {
+  background: rgba(255, 69, 58, 0.12);
+  color: var(--red, #FF453A);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+}
+.salesman-row.salesman-inactive .entry-name-text { opacity: 0.6; }
+.salesman-row.salesman-inactive .entry-notes     { opacity: 0.55; }
+
+/* --- Salesman autocomplete: "Add new" row styling --- */
+.suggestion-item.suggestion-add-new {
+  border-top: 1px dashed var(--border, rgba(127, 127, 127, 0.25));
+  color: var(--brand, #0A84FF);
+}
+.suggestion-item.suggestion-add-new strong { color: var(--brand, #0A84FF); }
+
+.stat-trend {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  vertical-align: middle;
+}
+.stat-trend.up   { color: var(--green, #30D158); }
+.stat-trend.down { color: var(--red, #FF453A); }
+
+.bank-transfer-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -10px 0 24px;
+  padding: 12px 18px;
+  background: var(--surface, rgba(127, 127, 127, 0.06));
+  border: 1px dashed var(--border, rgba(127, 127, 127, 0.25));
+  border-radius: 10px;
+  font-size: 13px;
+}
+.bank-transfer-strip .bt-icon   { font-size: 16px; }
+.bank-transfer-strip .bt-label  { color: var(--text2, #94a3b8); flex: 1; }
+.bank-transfer-strip .bt-amount { font-weight: 600; color: var(--text, inherit); }
+
+.summary-stat-card.highlight {
+  position: relative;
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.35);
 }
 
 .monthly-breakdown-row {
@@ -2139,7 +2335,8 @@ input.amount-input {
   .summary-table {
     max-width: 100%;
   }
-  .summary-cards {
+  .summary-cards,
+  .summary-cards.summary-cards-4 {
     grid-template-columns: 1fr;
   }
   .summary-stat-card .stat-value {
@@ -2796,4 +2993,364 @@ body::before {
 ::selection {
   background: rgba(10, 132, 255, 0.3);
   color: inherit;
+}
+
+/* ============================================================
+   SALESMAN UX POLISH — inline validation, counts, animation
+   ============================================================ */
+
+/* Inline input error (replaces alert popup) */
+.input-error {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 3px var(--red-glow) !important;
+}
+
+.error-text {
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.4;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.error-text::before {
+  content: "⚠";
+  font-size: 13px;
+}
+
+/* Section header count badge */
+.count-badge {
+  color: var(--text2);
+  font-weight: 600;
+  font-size: 14px;
+  margin-left: 8px;
+  letter-spacing: -0.2px;
+}
+
+/* Salesman row — smooth move/fade transition */
+.salesman-row {
+  transition: opacity 0.3s ease, transform 0.3s ease, background 0.2s ease;
+}
+
+.salesman-row.row-fading {
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+
+/* Inactive section stays dim overall */
+.salesmen-inactive-section {
+  opacity: 0.85;
+}
+
+.salesmen-inactive-section .salesman-row {
+  opacity: 0.75;
+}
+
+.salesmen-inactive-section .salesman-row:hover {
+  opacity: 1;
+}
+
+/* Empty state tuned for inactive-salesmen card */
+.empty-msg.empty-compact {
+  padding: 28px 20px;
+  color: var(--text3);
+}
+
+.empty-msg.empty-compact .empty-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.empty-msg.empty-compact .empty-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Mobile spacing */
+@media (max-width: 640px) {
+  .count-badge { display: inline-block; margin-left: 6px; font-size: 13px; }
+  .error-text  { font-size: 12px; }
+}
+
+/* ============================================================
+   Owner Dashboard — minimal at-a-glance view
+   ============================================================ */
+.dash-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.dash-alerts { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
+.dash-alerts .flash { margin: 0; }
+.dash-alert-icon { margin-right: 6px; }
+
+.dash-section-title { margin-top: 26px; margin-bottom: 12px; }
+
+.dash-salesman-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.dash-salesman-card {
+  padding: 22px 24px;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.dash-sm-name {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 4px;
+  color: var(--text);
+}
+.dash-sm-amount {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--green);
+  margin-top: 4px;
+}
+.dash-sm-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.dash-sm-empty {
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 8px;
+}
+
+.dash-trend-card { padding: 20px 24px; }
+.dash-spark {
+  width: 100%;
+  height: 90px;
+  display: block;
+  overflow: visible;
+}
+.dash-spark-dot {
+  transition: r 0.15s ease, stroke-width 0.15s ease;
+  cursor: help;
+}
+.dash-spark-dot:hover {
+  r: 5;
+  stroke-width: 2;
+}
+.dash-trend-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 90px;
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 500;
+}
+.dash-trend-empty-icon {
+  font-size: 18px;
+  opacity: 0.7;
+}
+.dash-trend-dates {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono, monospace);
+}
+
+@media (max-width: 640px) {
+  .dash-salesman-row { grid-template-columns: 1fr; }
+  .dash-trend-dates span:nth-child(even) { visibility: hidden; }
+}
+
+/* Clickable summary cards on the dashboard */
+a.dash-card-link,
+a.dash-card-link:visited,
+a.dash-card-link:hover {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  cursor: pointer;
+}
+a.dash-card-link:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+a.dash-card-link:active { transform: translateY(-1px); }
+a.dash-card-link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+/* Yesterday-vs-today trend pill */
+.dash-trend {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-glass, rgba(127, 127, 127, 0.08));
+}
+.dash-trend.good { color: var(--green); }
+.dash-trend.bad  { color: var(--red); }
+.dash-trend.flat { color: var(--muted); }
+
+/* "Everything looks normal" — empty alert state */
+.dash-alerts-ok {
+  text-align: center;
+  padding: 10px 16px;
+  margin: 14px 0 4px;
+  font-size: 13px;
+  color: var(--green);
+  background: rgba(52, 199, 89, 0.08);
+  border: 1px solid rgba(52, 199, 89, 0.18);
+  border-radius: 10px;
+}
+.dash-alerts-ok-icon {
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* ============================================================
+   EXPENSE DRILL-DOWN (/expenses/details)
+   ============================================================ */
+.xd-filter-card { padding: 16px 20px; margin-bottom: 18px; }
+.xd-filter-form { display: flex; flex-direction: column; gap: 12px; }
+.xd-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.xd-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text2);
+  flex: 1 1 160px;
+}
+.xd-filter-field input {
+  font-size: 14px;
+  padding: 10px 12px;
+}
+.xd-quick-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.xd-section-title { margin-top: 22px; }
+.xd-section-focus {
+  color: var(--brand);
+}
+
+.xd-breakdown-card { padding: 16px 20px; }
+.xd-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.xd-break-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 120px 48px;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+.xd-break-name { color: var(--text); font-weight: 500; }
+.xd-break-bar {
+  height: 8px;
+  background: var(--surface2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.xd-break-bar-fill {
+  height: 100%;
+  background: var(--brand);
+  opacity: 0.7;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+.xd-break-amount { text-align: right; color: var(--text); }
+.xd-break-pct   { text-align: right; color: var(--text2); font-size: 12px; }
+
+.xd-table-card { padding: 0; overflow: hidden; }
+.xd-table-scroll {
+  max-height: 520px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.xd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.xd-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface2);
+  color: var(--text2);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border2);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.xd-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border2);
+  vertical-align: top;
+}
+.xd-table tbody tr:last-child td { border-bottom: none; }
+.xd-table tbody tr:hover { background: var(--surface2); }
+.xd-right   { text-align: right; }
+.xd-nowrap  { white-space: nowrap; }
+
+.xd-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  white-space: nowrap;
+}
+
+.xd-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text2);
+  font-size: 14px;
+}
+
+.xd-truncated-note {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .xd-break-row {
+    grid-template-columns: 1fr 80px;
+    grid-template-areas:
+      "name amount"
+      "bar  bar"
+      "pct  pct";
+    gap: 4px 12px;
+  }
+  .xd-break-name   { grid-area: name; }
+  .xd-break-amount { grid-area: amount; }
+  .xd-break-bar    { grid-area: bar; }
+  .xd-break-pct    { grid-area: pct; text-align: left; }
+}
+
+.fade-out {
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: all 0.3s ease;
 }

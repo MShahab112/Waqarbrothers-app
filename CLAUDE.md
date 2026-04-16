@@ -1,67 +1,96 @@
-# CLAUDE.md — Project Instructions
+# CLAUDE.md
 
-> Claude Code reads this file automatically. Do not delete it.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project
 
-Waqar & Brothers — Daily Account Book (digital replacement for a physical paper register)
-A local-only accounting app for a Tapal (tea) wholesale agency in Pakistan.
+Waqar & Brothers — Daily Account Book. A local-only Flask/SQLite accounting app for a Tapal (tea) wholesale agency in Pakistan. Runs on a single Windows 11 laptop, accessed via Chrome/Edge at http://localhost:8000. Ships as a PyInstaller `.exe` wrapped in an Inno Setup installer.
 
 ## Tech Stack (LOCKED — do not change)
 
 - Backend: Python 3.11 + Flask
-- Database: SQLite (plain, no encryption in Phase 1)
-- Frontend: HTML + CSS + Vanilla JavaScript (no React, no Vue, no Tailwind)
-- Runs on: Windows 11 laptop, accessed via Chrome/Edge at http://localhost:8000
+- Database: SQLite (plain, no encryption)
+- Frontend: HTML + CSS + Vanilla JavaScript + Chart.js (no React, no Vue, no Tailwind)
+- PDF: reportlab. Excel export: pandas.
+- Packaging: PyInstaller (`app/WaqarBrothers.spec`) + Inno Setup (`installer.iss`)
 
-## Project Location
+## Common commands
 
+All commands run from `C:\WaqarBrothers\`. This is a Windows project — use `.bat` scripts or direct `python` calls, not Unix tooling.
+
+```bat
+REM First-time setup: installs Flask, generates SECRET_KEY, creates DB, registers auto-start
+install.bat
+
+REM Run the app (dev or installed)
+start.bat
+REM equivalent: cd app && python app.py
+
+REM Rebuild the standalone .exe (requires pyinstaller installed)
+cd app && pyinstaller WaqarBrothers.spec
+
+REM Rebuild the Windows installer (requires Inno Setup)
+REM Compile installer.iss with ISCC or the Inno Setup IDE
 ```
-C:\WaqarBrothers\
-├── app\              # Flask app (app.py, templates/, static/)
-├── data\             # accounts.db (SQLite database)
-├── logs\             # app.log (Flask output)
-├── install.bat       # One-time setup script
-├── start.bat         # Starts the app
-└── README.txt        # User instructions (plain English)
-```
 
-## Current Phase
+There is no test suite, linter, or formatter configured. Do not add one unless the user asks.
 
-Phase 1 — MVP Core Daily Entry (login + add recovery + add expense + daily totals)
+## Architecture
 
-## Key Business Rules
+### Single-file Flask app
 
-1. This is a tea wholesale agency. Salesmen go out daily and collect payments (**recovery**) from shopkeepers.
-2. All amounts in **PKR** with **lakh/crore** comma formatting (e.g., PKR 19,52,413).
-3. Financial year: **July 1 to June 30**.
+`app/app.py` (~2400 lines) contains **everything**: routes, DB helpers, PDF generation, Excel export, backup/restore, day close/reopen with admin PIN, and session/auth. When adding features, extend this file rather than creating new modules — the project deliberately avoids package structure for simplicity. Templates live in `app/templates/`, static assets in `app/static/`, and top-level brand art in `assets/`.
+
+### Three different path roots (important for PyInstaller)
+
+`app.py` defines three resolvers near the top, and mixing them up will break either dev or the frozen `.exe`:
+
+- `resource_path(rel)` — for **bundled read-only** files (templates, static). Uses `sys._MEIPASS` when frozen.
+- `get_base_path()` — for **writable user data** (accounts.db, uploads/, config.py, backups/). Returns the directory containing `app.py` in dev, or the directory containing the `.exe` when frozen. **Never use `_MEIPASS` for writable data** — it's a temp extraction dir.
+- `assets_path()` — for the top-level `assets/` folder (logos, icons). Bundled into the frozen exe via `--add-data assets;assets`.
+
+`DATABASE = os.path.join(BASE_PATH, 'accounts.db')` — in dev this resolves to `app/accounts.db`, **not** `data/accounts.db`. The `data/` directory and `setup_db.py` are historical; the live database is created and migrated by `init_db()` in `app.py` on every startup. Treat `app.py`'s `init_db()` as the source of truth for schema. If you change the schema, update `init_db()` **and** mirror it in `setup_db.py`.
+
+### Database conventions
+
+- SQLite with `journal_mode=WAL` (persistent, set in `init_db`) and `synchronous=NORMAL` (per-connection, set in `get_db`). Safe for a single-user desktop app.
+- Every request gets one connection via `g.db` and it's closed in `teardown_appcontext`.
+- Three tables: `users`, `daily_entries`, `settings` (key-value).
+- **Soft delete only** — set `is_deleted = 1`. The `idx_entries_date` and `idx_entries_type` indexes include `is_deleted`, so all SELECTs must filter `is_deleted = 0` to hit them.
+- Amounts are stored as **INTEGER PKR** (no decimals anywhere).
+- `format_pkr()` renders the lakh/crore comma grouping (e.g. `PKR 19,52,413`).
+- Opening balance for a given day walks back through history via `get_opening_balance()` — it skips gap days and carries forward the most recent closing balance. Do not reimplement this inline.
+
+### Day close / reopen with admin PIN
+
+Closing a day writes a PDF snapshot into a per-day backup folder (`day_backup_folder(date_str)`) and marks the day closed. Reopening a closed day requires verifying an admin PIN (`verify_admin_pin`) and is rate-limited via `get_reopen_time`. The PIN hash lives in the `settings` table, separate from the user password. Any route that mutates a closed day must check `is_day_closed()` first.
+
+### Auth
+
+Single-user (`admin`). Default password `admin123`, forced change on first login (`must_change_password`). 5 failed attempts → 15-minute lockout via `failed_attempts` / `locked_until` columns. Passwords hashed with `werkzeug.security` (pbkdf2:sha256). `SECRET_KEY` is generated by `install.bat` into `app/config.py` — do not hardcode it, and do not commit `config.py`.
+
+## Key business rules (non-derivable from code)
+
+1. Salesmen collect daily payments (**recovery**) from shopkeepers.
+2. All amounts in **PKR** with **lakh/crore** comma formatting.
+3. Financial year runs **July 1 → June 30**.
 4. **Bank Slip** entries are NOT expenses — they are cash-to-bank transfers.
 5. **Owner Drawings** (Waqar, Waqas, Home) are NOT business expenses — they are personal withdrawals.
 6. **Profit/Loss = Total Recovery − Business Expenses ONLY.** Exclude drawings, bank transfers, charity.
 7. Same salesman can have multiple entries per day.
-8. Closing balance of one day = opening balance of the next day (walk back to most recent day with entries — skip gap days).
-9. **Soft delete only.** Never hard-delete any record. Set is_deleted = 1.
+8. Closing balance of one day = opening balance of the next day, walking back past gap days.
+9. **Never hard-delete any record.** Set `is_deleted = 1`.
 
-## Coding Rules
+## Coding rules
 
-- Give full working code. No placeholders. No "TODO" comments.
-- All SQL must use **parameterized queries** (never string concatenation).
-- **Never store passwords as plain text.** Use werkzeug.security or hashlib.
-- All amounts stored as **INTEGER** in the database (no decimals).
-- Flask SECRET_KEY must be generated in install.bat and stored in config.py — never hardcoded.
-- The [Del] button must be inside a `<form method="POST">` — never an `<a href>` link.
-- Build only the **current phase**. Do not add features from later phases.
+- Give full working code. No placeholders or `TODO` comments.
+- All SQL must use **parameterized queries** — never f-strings or concatenation into SQL.
+- Never store passwords as plain text. Use `werkzeug.security`.
+- All money is **INTEGER** in the DB. No floats, no decimals, no currency libraries.
+- `SECRET_KEY` is generated by `install.bat` into `config.py`. Never hardcode it.
+- The `[Del]` button must be inside a `<form method="POST">` — never an `<a href>` link (soft-delete is a state change).
+- When adding a route that touches `daily_entries`, filter `is_deleted = 0` and respect `is_day_closed()` for mutations.
 
-## Phase Overview
+## Reference
 
-| Phase | Name                    | Status      |
-|-------|-------------------------|-------------|
-| 1     | MVP — Core Daily Entry  | 🔨 Building |
-| 2     | Full Register Features  | ⏳ Waiting   |
-| 3     | Backup                  | ⏳ Waiting   |
-| 4     | Phone Access & UI Polish| ⏳ Waiting   |
-
-## Full PRD
-
-For complete feature specs, database schema, UI layouts, validation rules, and step-by-step build instructions, see:
-**Waqar_Brothers_Digital_Account_Book_PRD.md**
+The full PRD with original phase specs, DB schema, UI layouts, and validation rules lives in `Waqar_Brothers_Digital_Account_Book_PRD.md`. Note that the app has shipped past the PRD's "Phase 1" scope — reports, PDF export, backup/restore, receipt uploads, and day close/reopen are all implemented. Treat the PRD as historical intent; treat `app.py` and `app/templates/` as the current spec.

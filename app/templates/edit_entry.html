@@ -5,21 +5,37 @@
 <div class="form-box">
     <h1>{% if entry['type'] == 'recovery' %}<span style="color: var(--green);">&#9679;</span>{% else %}<span style="color: var(--red);">&#9679;</span>{% endif %} Edit {{ 'Recovery' if entry['type'] == 'recovery' else 'Expense' }} Entry</h1>
 
-    <form method="POST" action="{{ url_for('edit_entry', entry_id=entry['id']) }}">
+    <form method="POST" action="{{ url_for('edit_entry', entry_id=entry['id']) }}" id="editEntryForm">
+        {% if entry['type'] == 'recovery' %}
+        <input type="hidden" name="salesman_id" id="edit_salesman_id"
+               value="{{ entry['salesman_id'] or '' }}">
+        {% endif %}
+
         <div class="form-group">
             <label for="date">Date</label>
             <input type="date" id="date" name="date"
                    value="{{ entry['date'] }}" required>
         </div>
 
-        <div class="form-group">
+        <div class="form-group {% if entry['type'] == 'recovery' %}suggestions-wrap{% endif %}">
             {% if entry['type'] == 'recovery' %}
-            <label for="description">Salesman Name</label>
+            <label for="description">Salesman</label>
+            <input type="text" id="description" name="description"
+                   value="{{ entry['description'] }}" required autocomplete="off"
+                   placeholder="Type to search salesmen..."
+                   data-salesman-autocomplete="1" autofocus>
+            <div class="suggestions-list" id="editSuggestions" style="display:none;"></div>
+            <div class="entry-notes" style="margin-top:6px;">
+                Choose an existing salesman or type a new name and click <strong>Add new</strong>.
+            </div>
+            <div class="error-text" id="editSalesmanError" style="display:none;">
+                Please select an existing salesman or click '+ Add new'.
+            </div>
             {% else %}
             <label for="description">Description</label>
-            {% endif %}
             <input type="text" id="description" name="description"
                    value="{{ entry['description'] }}" required autofocus>
+            {% endif %}
         </div>
 
         <div class="form-group">
@@ -41,4 +57,311 @@
         </div>
     </form>
 </div>
+
+{% if entry['type'] == 'recovery' %}
+<!-- SALESMAN CREATION PIN MODAL -->
+<div id="salesmanPinModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width: 420px;">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--brand);">&#128274;</span> Confirm New Salesman</div>
+            <button type="button" onclick="closeSalesmanPinModal()" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <div style="padding: 4px 0 14px; line-height: 1.5;">
+            Are you sure you want to create new salesman
+            <strong id="salesmanPinName">""</strong>?
+            <div class="entry-notes" style="margin-top: 8px;">
+                Enter the admin PIN to confirm. This is the same PIN used for closing days.
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="salesmanPinInput">Admin PIN</label>
+            <input type="password" id="salesmanPinInput" inputmode="numeric"
+                   maxlength="4" autocomplete="off" placeholder="••••"
+                   style="letter-spacing: 6px; text-align: center; font-size: 18px;">
+            <div id="salesmanPinError" class="flash flash-error"
+                 style="display:none; margin-top: 10px; padding: 8px 12px;"></div>
+        </div>
+        <div class="form-actions">
+            <button type="button" onclick="closeSalesmanPinModal()" class="btn btn-ghost">Cancel</button>
+            <button type="button" id="salesmanPinConfirm" class="btn btn-primary">Create</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// SALESMAN AUTOCOMPLETE (edit form)
+// ============================================================
+(function() {
+    var input = document.querySelector('input[data-salesman-autocomplete="1"]');
+    if (!input) return;
+    var listEl = document.getElementById('editSuggestions');
+    var hiddenId = document.getElementById('edit_salesman_id');
+    if (!listEl || !hiddenId) return;
+
+    var activeIdx = -1;
+    var lastResults = [];
+    var debounceTimer = null;
+    var lastSelectedName = input.value || '';
+
+    function hideList() { listEl.style.display = 'none'; activeIdx = -1; }
+
+    function clearSalesmanError() {
+        input.classList.remove('input-error');
+        var err = document.getElementById('editSalesmanError');
+        if (err) err.style.display = 'none';
+    }
+
+    function pickSalesman(id, name) {
+        input.value = name;
+        hiddenId.value = String(id);
+        lastSelectedName = name;
+        hideList();
+        clearSalesmanError();
+        var amountField = input.closest('form').querySelector('.amount-input');
+        if (amountField) { amountField.focus(); amountField.select(); }
+    }
+
+    function createNew(rawName) {
+        var name = (rawName || input.value || '').trim();
+        if (!name) return;
+        window.__salesmanPendingName = name;
+        window.__salesmanPickCallback = function(id, newName) {
+            pickSalesman(id, newName);
+        };
+        openSalesmanPinModal(name);
+    }
+
+    function render(results, query) {
+        lastResults = results || [];
+        listEl.innerHTML = '';
+        var hasExact = false;
+        var q = (query || '').trim();
+        var qLower = q.toLowerCase();
+
+        lastResults.forEach(function(s) {
+            var div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = s.name;
+            div.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                pickSalesman(s.id, s.name);
+            });
+            listEl.appendChild(div);
+            if (s.name.toLowerCase() === qLower) hasExact = true;
+        });
+
+        if (q && !hasExact) {
+            var add = document.createElement('div');
+            add.className = 'suggestion-item suggestion-add-new';
+            add.innerHTML = '<strong>+ Add new</strong> &ldquo;' + q.replace(/</g, '&lt;') + '&rdquo;';
+            add.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                createNew(q);
+            });
+            listEl.appendChild(add);
+        }
+
+        if (!listEl.children.length) { hideList(); return; }
+        listEl.style.display = 'block';
+        activeIdx = -1;
+    }
+
+    function fetchSuggestions(q) {
+        var url = '{{ url_for("api_salesmen") }}?q=' + encodeURIComponent(q || '');
+        fetch(url).then(function(r) { return r.ok ? r.json() : []; })
+                  .then(function(data) { render(data || [], q); })
+                  .catch(function() { render([], q); });
+    }
+
+    function schedule() {
+        clearTimeout(debounceTimer);
+        var q = input.value;
+        debounceTimer = setTimeout(function() { fetchSuggestions(q); }, 120);
+    }
+
+    input.addEventListener('focus', function() { fetchSuggestions(input.value); });
+    input.addEventListener('input', function() {
+        if (input.value.trim() !== lastSelectedName) {
+            hiddenId.value = '';
+        }
+        clearSalesmanError();
+        schedule();
+    });
+    input.addEventListener('blur', function() { setTimeout(hideList, 150); });
+    input.addEventListener('keydown', function(e) {
+        var items = listEl.querySelectorAll('.suggestion-item');
+        if (!items.length || listEl.style.display === 'none') return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, items.length - 1);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'Enter') {
+            // Autocomplete Enter: pick (active row, or first row if none).
+            e.preventDefault();
+            var pickIdx = activeIdx >= 0 ? activeIdx : 0;
+            var el = items[pickIdx];
+            if (el.classList.contains('suggestion-add-new')) {
+                createNew(input.value);
+            } else {
+                var picked = lastResults[pickIdx];
+                if (picked) pickSalesman(picked.id, picked.name);
+            }
+        }
+    });
+})();
+
+// ============================================================
+// SALESMAN CREATION — PIN CONFIRMATION MODAL
+// ============================================================
+function openSalesmanPinModal(name) {
+    var m = document.getElementById('salesmanPinModal');
+    if (!m) return;
+    document.getElementById('salesmanPinName').textContent = '"' + name + '"';
+    var pinInput = document.getElementById('salesmanPinInput');
+    var err = document.getElementById('salesmanPinError');
+    if (pinInput) { pinInput.value = ''; pinInput.type = 'password'; }
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { if (pinInput) pinInput.focus(); }, 30);
+}
+
+function closeSalesmanPinModal() {
+    var m = document.getElementById('salesmanPinModal');
+    if (!m) return;
+    m.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    window.__salesmanPendingName = null;
+}
+
+function showSalesmanPinError(msg) {
+    var err = document.getElementById('salesmanPinError');
+    if (!err) return;
+    err.textContent = msg;
+    err.style.display = 'block';
+}
+
+function submitSalesmanPin() {
+    var pinInput = document.getElementById('salesmanPinInput');
+    var btn = document.getElementById('salesmanPinConfirm');
+    if (!pinInput || !btn) return;
+
+    var pin = (pinInput.value || '').trim();
+    if (!/^\d{4}$/.test(pin)) {
+        showSalesmanPinError('PIN must be exactly 4 digits.');
+        pinInput.focus(); pinInput.select();
+        return;
+    }
+    var name = window.__salesmanPendingName;
+    if (!name) { closeSalesmanPinModal(); return; }
+
+    btn.disabled = true;
+    var originalText = btn.textContent;
+    btn.textContent = 'Creating…';
+
+    var body = new URLSearchParams();
+    body.append('name', name);
+    body.append('pin', pin);
+
+    fetch('{{ url_for("api_salesmen_create") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    })
+    .then(function(r) {
+        return r.json().then(function(data) { return { status: r.status, data: data }; });
+    })
+    .then(function(res) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        if (res.status === 401) {
+            showSalesmanPinError((res.data && res.data.error) || 'Incorrect PIN.');
+            pinInput.focus(); pinInput.select();
+            return;
+        }
+        if (res.status !== 200 || !res.data || !res.data.id) {
+            showSalesmanPinError((res.data && res.data.error) || 'Could not create salesman.');
+            return;
+        }
+        var cb = window.__salesmanPickCallback;
+        closeSalesmanPinModal();
+        if (typeof cb === 'function') cb(res.data.id, res.data.name);
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        showSalesmanPinError('Network error — please try again.');
+    });
+}
+
+(function() {
+    var m = document.getElementById('salesmanPinModal');
+    if (!m) return;
+    m.addEventListener('click', function(e) {
+        if (e.target === this) closeSalesmanPinModal();
+    });
+    var btn = document.getElementById('salesmanPinConfirm');
+    if (btn) btn.addEventListener('click', submitSalesmanPin);
+    var pinInput = document.getElementById('salesmanPinInput');
+    if (pinInput) {
+        pinInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); submitSalesmanPin(); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeSalesmanPinModal(); }
+        });
+        pinInput.addEventListener('input', function() {
+            var cleaned = pinInput.value.replace(/\D/g, '').slice(0, 4);
+            if (cleaned !== pinInput.value) pinInput.value = cleaned;
+            var err = document.getElementById('salesmanPinError');
+            if (err) err.style.display = 'none';
+        });
+    }
+})();
+
+// ============================================================
+// AMOUNT FIELD — focus-select, Enter hops to Notes (not submit)
+// ============================================================
+(function() {
+    var amt = document.getElementById('amount');
+    var notes = document.getElementById('notes');
+    if (!amt) return;
+    amt.addEventListener('focus', function() { amt.select(); });
+    amt.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (notes) notes.focus();
+        }
+    });
+})();
+
+// ============================================================
+// SUBMIT GUARD — recovery must have a selected salesman_id
+// ============================================================
+(function() {
+    var form = document.getElementById('editEntryForm');
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+        var sidEl = document.getElementById('edit_salesman_id');
+        if (!sidEl) return; // non-recovery
+        var sidVal = parseInt(sidEl.value || '0', 10);
+        if (!sidVal) {
+            e.preventDefault();
+            var desc = document.getElementById('description');
+            if (desc) {
+                desc.classList.add('input-error');
+                desc.focus();
+                desc.select();
+            }
+            var err = document.getElementById('editSalesmanError');
+            if (err) err.style.display = 'flex';
+        }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

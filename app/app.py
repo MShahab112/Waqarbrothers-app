@@ -2,6 +2,7 @@
 # Main Flask Application (Phase 1)
 
 import os
+import re
 import sys
 import io
 import time
@@ -11,6 +12,7 @@ import sqlite3
 import threading
 import webbrowser
 import traceback
+import uuid
 import pandas as pd
 from functools import wraps
 from datetime import datetime, date, timedelta
@@ -53,12 +55,20 @@ def get_base_path():
 BASE_PATH = get_base_path()
 DATABASE = os.path.join(BASE_PATH, 'accounts.db')
 
+# Latest schema-migration level. Bump this when adding a new step in
+# run_migrations() so the final-version assertion in that function and
+# the /debug/db-status route both reflect the true target.
+CURRENT_DB_VERSION = 4
+
 app = Flask(
     __name__,
     template_folder=resource_path('templates'),
     static_folder=resource_path('static')
-    
 )
+
+# DEBUG: confirm Flask is loading templates/static from app/ (not a stale copy)
+print("TEMPLATE PATH:", os.path.abspath(app.template_folder))
+print("STATIC PATH:", os.path.abspath(app.static_folder))
 
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
@@ -86,23 +96,67 @@ except (ImportError, AttributeError):
 # Session ends when browser closes
 app.config['SESSION_PERMANENT'] = False
 
-# Cache /static assets aggressively (1 year). Flask appends ?v=<mtime> to
-# url_for('static', ...) URLs automatically, so edited CSS/JS still
-# invalidates correctly — users never see stale files.
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
+# Disable static-file caching so edited CSS/JS reaches the browser
+# immediately. (Flask does NOT auto-append ?v=<mtime> to url_for('static');
+# the previous 1-year max-age was pinning stale assets in the browser.)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-# Uploads folder for receipt images
+# Uploads folder for receipt images. Stored alongside the writable DB
+# (outside the PyInstaller _MEIPASS temp dir) so images survive updates.
 UPLOAD_FOLDER = os.path.join(BASE_PATH, 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
+# 5 MB hard cap on any single upload. Flask itself enforces this — a larger
+# body raises 413 before our route code even runs.
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+
+ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png'}
+
+
+def _ext_of(filename):
+    """Lowercased extension without the dot, or '' if no extension."""
+    if not filename or '.' not in filename:
+        return ''
+    return filename.rsplit('.', 1)[1].lower()
+
+
+def save_receipt_file(file_storage):
+    """Validate and save an uploaded receipt image.
+
+    Returns the stored filename (opaque uuid-based) on success, or None if
+    no file was provided. Raises ValueError on validation failure — the
+    caller is responsible for surfacing that to the user.
+    """
+    if not file_storage or not file_storage.filename:
+        return None
+
+    ext = _ext_of(file_storage.filename)
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError('Only JPG, JPEG, or PNG images are allowed.')
+
+    # Cheap sniff of the underlying stream to reject files that claim to be
+    # images by extension but aren't. We only check the first few bytes —
+    # good enough to block the casual case without pulling in Pillow.
+    head = file_storage.stream.read(12)
+    file_storage.stream.seek(0)
+    is_jpeg = head[:3] == b'\xff\xd8\xff'
+    is_png = head[:8] == b'\x89PNG\r\n\x1a\n'
+    if not (is_jpeg or is_png):
+        raise ValueError('File does not appear to be a valid JPG or PNG image.')
+
+    # Opaque filename: nothing from the user reaches the filesystem.
+    # Normalize the extension to the sniffed format.
+    stored_ext = 'png' if is_png else 'jpg'
+    stored_name = f'{uuid.uuid4().hex}.{stored_ext}'
+    file_storage.save(os.path.join(app.config['UPLOAD_FOLDER'], stored_name))
+    return stored_name
 
 # Top-level assets folder (logos, icons, brand art). Resolved once at
 # startup so every request hits a cached path.
 ASSETS_FOLDER = assets_path()
 
 # Current app version. Bump this on every release.
-CURRENT_VERSION = "1.5"
+CURRENT_VERSION = "1.6"
 
 
 def _version_tuple(v):
@@ -141,6 +195,436 @@ def close_db(exception):
     db = g.pop('db', None)
     if db is not None:
         db.close()
+
+
+# --- Query profiling -----------------------------------------------------
+# Lightweight wrapper. Logs a line to stdout only when a query exceeds
+# _SLOW_QUERY_MS. Applied selectively to the hot aggregation paths — NOT
+# a blanket replacement for db.execute (too noisy and most queries are fast).
+_SLOW_QUERY_MS = 5.0
+
+
+def execute_timed(db, query, params=()):
+    """Run a SQL statement and warn if execution exceeds _SLOW_QUERY_MS.
+    Returns the cursor, so callers can chain .fetchall() / .fetchone() as
+    usual. Timing covers SQLite execute() — for aggregate queries this is
+    where the work happens; row-streaming selects may undercount fetch cost.
+    """
+    start = time.perf_counter()
+    cur = db.execute(query, params)
+    duration = (time.perf_counter() - start) * 1000.0
+    if duration > _SLOW_QUERY_MS:
+        snippet = ' '.join(query.split())
+        if len(snippet) > 140:
+            snippet = snippet[:137] + '...'
+        print(f"[SLOW QUERY] {duration:.2f}ms -> {snippet}")
+    return cur
+
+
+def ensure_salesmen_table(db):
+    """Create the salesmen table if the restored DB is missing it.
+    Matches the schema created by init_db — UNIQUE COLLATE NOCASE so
+    "Khalid" and "khalid" collapse to one row."""
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS salesmen (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+            is_active  INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT    NOT NULL
+        )
+    ''')
+    db.commit()
+
+
+def ensure_salesman_id_column(db):
+    """Add salesman_id to daily_entries if a pre-v1.4 backup is restored."""
+    cols = [r[1] for r in db.execute('PRAGMA table_info(daily_entries)').fetchall()]
+    if 'salesman_id' not in cols:
+        db.execute('ALTER TABLE daily_entries ADD COLUMN salesman_id INTEGER')
+        db.commit()
+
+
+def ensure_entry_columns(db):
+    """Add payment_type / receipt / category to daily_entries if missing.
+    These were introduced after v1.0, so very old backups won't have them."""
+    cols = [r[1] for r in db.execute('PRAGMA table_info(daily_entries)').fetchall()]
+    changed = False
+    if 'payment_type' not in cols:
+        db.execute("ALTER TABLE daily_entries ADD COLUMN payment_type TEXT DEFAULT 'cash'")
+        changed = True
+    if 'receipt' not in cols:
+        db.execute('ALTER TABLE daily_entries ADD COLUMN receipt TEXT')
+        changed = True
+    if 'category' not in cols:
+        db.execute("ALTER TABLE daily_entries ADD COLUMN category TEXT DEFAULT 'other'")
+        changed = True
+    if changed:
+        db.commit()
+
+
+# Tokens stripped from recovery descriptions before comparing to a
+# salesman's name. Covers payment-method markers the agency typed inline
+# with the name back when the description was a free-text field.
+_SALESMAN_DESC_STOPWORDS = re.compile(
+    r'\b(recovery|recoveries|payment|payments|cheque|cash|online|'
+    r'bank\s*slip|bank|slip|sales|salesman|received|receipt|transfer)\b',
+    flags=re.IGNORECASE,
+)
+
+
+def _clean_salesman_name(raw):
+    """Normalize a raw recovery description so it can be matched against
+    a salesman's canonical name.
+        "Shahid (Cheque)"  -> "shahid"
+        "Shahid Recovery"  -> "shahid"
+        "  KHALID  "       -> "khalid"
+    Parenthesized fragments and transaction-type tokens are removed,
+    whitespace collapsed, and the result lower-cased."""
+    if not raw:
+        return ''
+    s = raw.lower()
+    s = re.sub(r'\([^)]*\)', ' ', s)
+    s = _SALESMAN_DESC_STOPWORDS.sub(' ', s)
+    s = re.sub(r'[^a-z0-9\s]', ' ', s)
+    return ' '.join(s.split())
+
+
+def backfill_salesmen(db):
+    """Create a salesmen row for every cleaned distinct recovery description.
+    The raw description is cleaned first (see _clean_salesman_name) so a
+    description like "Shahid (Cheque)" creates "Shahid" — not a junk
+    salesman named "Shahid (Cheque)". UNIQUE COLLATE NOCASE collapses case
+    variants. Idempotent — re-running inserts only genuinely new names."""
+    rows = db.execute('''
+        SELECT DISTINCT description
+        FROM daily_entries
+        WHERE type = 'recovery'
+          AND TRIM(COALESCE(description, '')) != ''
+    ''').fetchall()
+    now_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    inserted = False
+    seen = set()
+    for row in rows:
+        cleaned = _clean_salesman_name(row[0] or '')
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        name = cleaned.title()
+        db.execute(
+            'INSERT OR IGNORE INTO salesmen (name, is_active, created_at) VALUES (?, 1, ?)',
+            (name, now_ts)
+        )
+        inserted = True
+    if inserted:
+        db.commit()
+
+
+def link_salesman_ids(db):
+    """Link unlinked recovery rows (salesman_id NULL) to their salesman row
+    via a cleaned, case-insensitive exact comparison.
+    Cleaning strips parenthesized fragments and transaction-type tokens
+    ("(Cheque)", "Recovery", ...), so "Shahid (Cheque)" and "Shahid
+    Recovery" both map to the "Shahid" salesman.
+    Safety: if two distinct salesmen names clean to the SAME key (e.g.
+    "Ali" and "Ali Cheque" both → "ali"), that key is dropped from the
+    lookup — ambiguous rows are left unlinked rather than wrongly merged.
+    Already-linked rows are never touched."""
+    salesmen = db.execute('SELECT id, name FROM salesmen').fetchall()
+    name_to_id = {}
+    ambiguous = set()
+    for s in salesmen:
+        sid, name = s[0], s[1]
+        key = _clean_salesman_name(name)
+        if not key or key in ambiguous:
+            continue
+        if key in name_to_id and name_to_id[key] != sid:
+            ambiguous.add(key)
+            name_to_id.pop(key, None)
+            continue
+        name_to_id[key] = sid
+
+    rows = db.execute('''
+        SELECT id, description
+        FROM daily_entries
+        WHERE type = 'recovery'
+          AND (salesman_id IS NULL OR salesman_id = 0)
+          AND TRIM(COALESCE(description, '')) != ''
+    ''').fetchall()
+    updated = False
+    for row in rows:
+        rid, desc = row[0], row[1]
+        sid = name_to_id.get(_clean_salesman_name(desc))
+        if sid:
+            db.execute('UPDATE daily_entries SET salesman_id = ? WHERE id = ?', (sid, rid))
+            updated = True
+    if updated:
+        db.commit()
+
+
+def get_setting(db, key):
+    """Get a single value from the settings table.
+    Cached on Flask's g object for the current request when available —
+    falls back to an uncached read so migration code (which runs outside
+    any Flask app context) can use the same helper."""
+    cache = None
+    try:
+        cache = getattr(g, '_settings_cache', None)
+        if cache is None:
+            cache = g._settings_cache = {}
+    except RuntimeError:
+        cache = None
+
+    if cache is not None and key in cache:
+        return cache[key]
+
+    row = db.execute('SELECT value FROM settings WHERE key = ?',
+                     (key,)).fetchone()
+    if row is None:
+        val = None
+    else:
+        try:
+            val = row['value']
+        except (IndexError, TypeError, KeyError):
+            val = row[0]
+
+    if cache is not None:
+        cache[key] = val
+    return val
+
+
+def set_setting(db, key, value):
+    """Write a single value to the settings table. Context-agnostic — works
+    with both the Flask-request connection and a raw sqlite3.Connection."""
+    db.execute(
+        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+        (key, str(value) if value is not None else '')
+    )
+    db.commit()
+    try:
+        cache = getattr(g, '_settings_cache', None)
+        if cache is not None:
+            cache[key] = str(value) if value is not None else ''
+    except RuntimeError:
+        pass
+
+
+def log_migration(db, step):
+    """Append a migration step to migration_log. Safe to call repeatedly."""
+    db.execute(
+        "INSERT INTO migration_log (step, run_at) VALUES (?, datetime('now'))",
+        (step,)
+    )
+    db.commit()
+
+
+def _ensure_migration_log(db):
+    """Create the migration_log table (records every versioned step run)."""
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS migration_log (
+            id     INTEGER PRIMARY KEY AUTOINCREMENT,
+            step   TEXT    NOT NULL,
+            run_at TEXT    NOT NULL
+        )
+    ''')
+    db.commit()
+
+
+def run_migrations(db):
+    """Versioned, idempotent schema migrations.
+    Reads `settings.db_version` (treats missing as "0") and runs only the
+    steps the current DB hasn't seen. Each successful step bumps the
+    version and appends to migration_log. Called on every startup AND
+    after /restore-backup so old backups are upgraded automatically."""
+    _ensure_migration_log(db)
+
+    raw = get_setting(db, 'db_version') or '0'
+    try:
+        current_version = int(raw)
+    except (TypeError, ValueError):
+        current_version = 0
+
+    # v0 -> v1: salesmen table
+    if current_version < 1:
+        ensure_salesmen_table(db)
+        set_setting(db, 'db_version', '1')
+        log_migration(db, 'v1: salesmen table created')
+        current_version = 1
+
+    # v1 -> v2: salesman_id column on daily_entries
+    if current_version < 2:
+        ensure_salesman_id_column(db)
+        set_setting(db, 'db_version', '2')
+        log_migration(db, 'v2: salesman_id column added')
+        current_version = 2
+
+    # v2 -> v3: payment_type / receipt / category columns
+    if current_version < 3:
+        ensure_entry_columns(db)
+        set_setting(db, 'db_version', '3')
+        log_migration(db, 'v3: entry columns ensured')
+        current_version = 3
+
+    # v3 -> v4: backfill salesmen rows and link legacy recovery entries
+    if current_version < 4:
+        backfill_salesmen(db)
+        link_salesman_ids(db)
+        set_setting(db, 'db_version', '4')
+        log_migration(db, 'v4: salesmen backfilled and linked')
+        current_version = 4
+
+    # Drift guard: the constant must match the highest step above. If a new
+    # step is added without bumping CURRENT_DB_VERSION (or vice versa), this
+    # logs a warning rather than failing silently.
+    if current_version != CURRENT_DB_VERSION:
+        log_migration(
+            db,
+            f'WARNING: db_version {current_version} != CURRENT_DB_VERSION {CURRENT_DB_VERSION}'
+        )
+
+
+def run_integrity_checks(db):
+    """Read-only scan for common data-quality issues.
+    Never modifies data — each issue is reported with a type, a human
+    message, a count, and up to 5 example IDs/names so the admin can
+    locate the offending rows themselves."""
+    issues = []
+
+    def _examples(rows, key=0, limit=5):
+        out = []
+        for r in rows[:limit]:
+            try:
+                out.append(r[key])
+            except (IndexError, KeyError):
+                pass
+        return out
+
+    # A. Recovery entries with no salesman_id (excluding soft-deleted rows).
+    rows = db.execute('''
+        SELECT id, description, date
+        FROM daily_entries
+        WHERE type = 'recovery' AND is_deleted = 0
+          AND (salesman_id IS NULL OR salesman_id = 0)
+    ''').fetchall()
+    if rows:
+        issues.append({
+            'type':     'missing_salesman',
+            'severity': 'error',
+            'message':  'Recovery entries without a salesman_id',
+            'count':    len(rows),
+            'examples': _examples(rows, 0),
+        })
+
+    # B. Orphaned salesman_id — points to a row that no longer exists.
+    rows = db.execute('''
+        SELECT d.id, d.salesman_id
+        FROM daily_entries d
+        LEFT JOIN salesmen s ON d.salesman_id = s.id
+        WHERE d.salesman_id IS NOT NULL
+          AND d.salesman_id != 0
+          AND s.id IS NULL
+    ''').fetchall()
+    if rows:
+        issues.append({
+            'type':     'invalid_salesman_id',
+            'severity': 'error',
+            'message':  'Entries pointing to a non-existent salesman row',
+            'count':    len(rows),
+            'examples': _examples(rows, 0),
+        })
+
+    # C. Entries using an inactive salesman (excluding soft-deleted rows).
+    rows = db.execute('''
+        SELECT d.id, s.name
+        FROM daily_entries d
+        JOIN salesmen s ON d.salesman_id = s.id
+        WHERE s.is_active = 0
+          AND d.is_deleted = 0
+    ''').fetchall()
+    if rows:
+        names = sorted({r[1] for r in rows if r[1]})
+        issues.append({
+            'type':     'inactive_salesman_in_use',
+            'severity': 'warning',
+            'message':  'Entries referencing an inactive salesman',
+            'count':    len(rows),
+            'examples': names[:5],
+        })
+
+    # D. Duplicate salesman names (case-insensitive). Shouldn't normally
+    #    happen because of UNIQUE COLLATE NOCASE, but flag anyway in case
+    #    a restored backup was created before that constraint.
+    rows = db.execute('''
+        SELECT LOWER(name) AS lname, COUNT(*) AS n
+        FROM salesmen
+        GROUP BY LOWER(name)
+        HAVING COUNT(*) > 1
+    ''').fetchall()
+    if rows:
+        issues.append({
+            'type':     'duplicate_salesman_names',
+            'severity': 'warning',
+            'message':  'Salesmen with duplicate names (case-insensitive)',
+            'count':    len(rows),
+            'examples': [r[0] for r in rows[:5]],
+        })
+
+    # E. Negative current cash balance (warning only).
+    opening_raw = get_setting(db, 'opening_balance') or '0'
+    try:
+        opening = int(opening_raw)
+    except (TypeError, ValueError):
+        opening = 0
+    totals = db.execute('''
+        SELECT
+            COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0) AS rec,
+            COALESCE(SUM(CASE WHEN type = 'expense'
+                               AND COALESCE(payment_type, 'cash') != 'bank_slip'
+                              THEN amount ELSE 0 END), 0) AS exp,
+            COALESCE(SUM(CASE WHEN type = 'expense'
+                               AND COALESCE(payment_type, 'cash') = 'bank_slip'
+                              THEN amount ELSE 0 END), 0) AS bt
+        FROM daily_entries
+        WHERE is_deleted = 0
+    ''').fetchone()
+    rec = totals[0] if not hasattr(totals, 'keys') else totals['rec']
+    exp = totals[1] if not hasattr(totals, 'keys') else totals['exp']
+    bt  = totals[2] if not hasattr(totals, 'keys') else totals['bt']
+    closing = opening + rec - exp - bt
+    if closing < 0:
+        issues.append({
+            'type':     'negative_balance',
+            'severity': 'warning',
+            'message':  'Current cash on hand is negative',
+            'count':    1,
+            'examples': [format_pkr(closing)],
+        })
+
+    return {
+        'status':       'ok' if len(issues) == 0 else 'issues_found',
+        'total_issues': len(issues),
+        'issues':       issues,
+    }
+
+
+def get_db_status(db):
+    """Return current schema version and migration history for debugging.
+    Safe to call from request handlers or from a raw connection."""
+    version = get_setting(db, 'db_version') or '0'
+    try:
+        logs = db.execute(
+            'SELECT step, run_at FROM migration_log ORDER BY id DESC'
+        ).fetchall()
+    except sqlite3.OperationalError:
+        logs = []
+    up_to_date = str(version) == str(CURRENT_DB_VERSION)
+    status_text = 'Up to date' if up_to_date else 'Migration pending'
+    return {
+        'version': version,
+        'expected_version': str(CURRENT_DB_VERSION),
+        'up_to_date': up_to_date,
+        'status_text': status_text,
+        'logs': logs,
+    }
 
 
 def init_db():
@@ -184,18 +668,9 @@ def init_db():
             )
         ''')
 
-        # --- Migrate: add columns if missing (for databases created before these columns) ---
-        cursor.execute('PRAGMA table_info(daily_entries)')
-        existing_columns = [row[1] for row in cursor.fetchall()]
-
-        if 'payment_type' not in existing_columns:
-            cursor.execute("ALTER TABLE daily_entries ADD COLUMN payment_type TEXT DEFAULT 'cash'")
-
-        if 'receipt' not in existing_columns:
-            cursor.execute('ALTER TABLE daily_entries ADD COLUMN receipt TEXT')
-
-        if 'category' not in existing_columns:
-            cursor.execute("ALTER TABLE daily_entries ADD COLUMN category TEXT DEFAULT 'other'")
+        # Schema patches + legacy backfill — also runs on restore so pre-v1.4
+        # backups (no salesmen table / no salesman_id column) get upgraded.
+        run_migrations(conn)
 
         # --- Indexes ---
         cursor.execute('''
@@ -210,6 +685,17 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_entries_category
             ON daily_entries(category, is_deleted)
         ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_entries_salesman
+            ON daily_entries(salesman_id, is_deleted)
+        ''')
+        # Helps the expense drill-down's payment-type filters.
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_entries_payment
+            ON daily_entries(payment_type, is_deleted)
+        ''')
+        # Refresh planner stats so SQLite picks the right index on cold start.
+        cursor.execute('ANALYZE')
 
         # --- Persistent PRAGMAs ---
         # WAL is a database-level setting — once set, it sticks across
@@ -394,6 +880,9 @@ def login():
     if user['must_change_password'] == 1:
         return redirect(url_for('change_password'))
 
+    # Warm the dashboard cache so the first visit is served from memory.
+    _preload_dashboard_cache(db)
+
     return redirect(url_for('daily'))
 
 
@@ -498,21 +987,75 @@ app.jinja_env.filters['monthday'] = format_monthday
 
 # --- Step 5: Daily Page ---
 
-def get_setting(db, key):
-    """Get a single value from the settings table.
-    Results are cached on Flask's g object for the current request,
-    so repeated lookups of the same key hit the DB only once.
+# get_setting / set_setting / log_migration are defined earlier in this file
+# (near the migration helpers) so run_migrations can call them at module load.
+
+# Keyword → category map for auto-detection from the description field.
+# PRIORITY ORDER (first match wins): bank > drawing > zakat > utility >
+# transport > food > other. Tokens are checked case-insensitively as
+# substrings, so the ordering resolves overlaps deterministically.
+_CATEGORY_KEYWORDS = [
+    ('bank',      ('bank', 'deposit', 'slip', 'transfer', 'cheque', 'check')),
+    ('zakat',     ('zakat', 'charity', 'sadaqah', 'donation', 'khairat')),
+    ('utility',   ('utility', 'bill', 'electric', 'k-electric', 'kesc', 'gas',
+                   'water', 'internet', 'phone', 'mobile', 'ptcl', 'wifi')),
+    ('transport', ('transport', 'petrol', 'fuel', 'diesel', 'rickshaw',
+                   'taxi', 'bus', 'uber', 'careem', 'bike', 'vehicle', 'truck')),
+    ('food',      ('food', 'tea', 'chai', 'breakfast', 'lunch', 'dinner',
+                   'snack', 'biscuit', 'meal', 'naan', 'roti')),
+]
+
+# Categories we know how to display in reports
+VALID_CATEGORIES = ('food', 'transport', 'bank', 'utility',
+                    'zakat', 'other')
+
+
+def detect_category(description):
+    """Infer a category from the free-text description.
+
+    Returns one of VALID_CATEGORIES. Case-insensitive substring match.
     """
-    cache = getattr(g, '_settings_cache', None)
-    if cache is None:
-        cache = g._settings_cache = {}
-    if key in cache:
-        return cache[key]
-    row = db.execute('SELECT value FROM settings WHERE key = ?',
-                     (key,)).fetchone()
-    val = row['value'] if row else None
-    cache[key] = val
-    return val
+    desc = (description or '').lower()
+    if not desc:
+        return 'other'
+    for cat, keywords in _CATEGORY_KEYWORDS:
+        for kw in keywords:
+            if kw in desc:
+                return cat
+    return 'other'
+
+
+def canonical_salesman_name(raw):
+    """Normalize a salesman name: strip, collapse whitespace, title case."""
+    if not raw:
+        return ''
+    return ' '.join(str(raw).split()).title()
+
+
+def get_or_create_salesman(db, raw_name):
+    """Return salesman id for `raw_name`, creating an active row if missing.
+
+    If a row already exists (case-insensitive match on name) it is reused
+    as-is and its is_active flag is NOT changed — that way the caller can
+    still attach legacy recovery rows to a deactivated salesman without
+    silently reactivating them.
+    """
+    name = canonical_salesman_name(raw_name)
+    if not name:
+        return None
+    row = db.execute(
+        'SELECT id FROM salesmen WHERE name = ? COLLATE NOCASE',
+        (name,)
+    ).fetchone()
+    if row:
+        return row['id']
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cur = db.execute(
+        '''INSERT INTO salesmen (name, is_active, created_at)
+           VALUES (?, 1, ?)''',
+        (name, created_at)
+    )
+    return cur.lastrowid
 
 
 def get_opening_balance(db, current_date):
@@ -545,11 +1088,11 @@ def daily():
     # --- Search & filter params ---
     search = request.args.get('search', '').strip()
     filter_payment = request.args.get('payment_type', 'all').strip()
-    if filter_payment not in ('cash', 'online', 'all'):
+    if filter_payment not in ('cash', 'online', 'bank_slip', 'all'):
         filter_payment = 'all'
     category = request.args.get('category', 'all').strip()
-    valid_categories = ('all', 'food', 'transport', 'bank', 'utility', 'zakat', 'other')
-    if category not in valid_categories:
+    valid_cat_filters = ('all',) + VALID_CATEGORIES
+    if category not in valid_cat_filters:
         category = 'all'
 
     # --- Monthly filter ---
@@ -601,7 +1144,8 @@ def daily():
 
         # Get all expense entries for the month (non-deleted)
         expense_sql = '''
-            SELECT id, date, description, amount, notes, receipt, category
+            SELECT id, date, description, amount, notes, receipt, category,
+                   COALESCE(payment_type, 'cash') AS payment_type
             FROM daily_entries
             WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?
                   AND type = 'expense' AND is_deleted = 0'''
@@ -618,10 +1162,11 @@ def daily():
         expense_sql += ' ORDER BY date ASC, id ASC'
         expenses = db.execute(expense_sql, expense_params).fetchall()
 
-        # Calculate totals
+        # Calculate totals — bank_slip is a transfer, not an expense
         total_recovery = sum(r['amount'] for r in recoveries)
-        total_expenses = sum(e['amount'] for e in expenses)
-        closing_balance = opening_balance + total_recovery - total_expenses
+        total_expenses = sum(e['amount'] for e in expenses if e['payment_type'] != 'bank_slip')
+        total_bank_transfer = sum(e['amount'] for e in expenses if e['payment_type'] == 'bank_slip')
+        closing_balance = opening_balance + total_recovery - total_expenses - total_bank_transfer
 
         # Display label for the month
         month_name = date(selected_year, selected_month, 1).strftime('%B %Y')
@@ -646,6 +1191,7 @@ def daily():
                                expenses=expenses,
                                total_recovery=total_recovery,
                                total_expenses=total_expenses,
+                               total_bank_transfer=total_bank_transfer,
                                closing_balance=closing_balance,
                                prev_date=None,
                                next_date=None,
@@ -695,7 +1241,8 @@ def daily():
 
     # Get today's expense entries (non-deleted)
     expense_sql = '''
-        SELECT id, description, amount, notes, receipt, category
+        SELECT id, description, amount, notes, receipt, category,
+               COALESCE(payment_type, 'cash') AS payment_type
         FROM daily_entries
         WHERE date = ? AND type = 'expense' AND is_deleted = 0'''
     expense_params = [date_str]
@@ -711,10 +1258,11 @@ def daily():
     expense_sql += ' ORDER BY id ASC'
     expenses = db.execute(expense_sql, expense_params).fetchall()
 
-    # Calculate totals
+    # Calculate totals — bank_slip is a transfer, not an expense
     total_recovery = sum(r['amount'] for r in recoveries)
-    total_expenses = sum(e['amount'] for e in expenses)
-    closing_balance = opening_balance + total_recovery - total_expenses
+    total_expenses = sum(e['amount'] for e in expenses if e['payment_type'] != 'bank_slip')
+    total_bank_transfer = sum(e['amount'] for e in expenses if e['payment_type'] == 'bank_slip')
+    closing_balance = opening_balance + total_recovery - total_expenses - total_bank_transfer
 
     # Previous and next day for navigation
     prev_date = (page_date - timedelta(days=1)).isoformat()
@@ -729,6 +1277,7 @@ def daily():
                            expenses=expenses,
                            total_recovery=total_recovery,
                            total_expenses=total_expenses,
+                           total_bank_transfer=total_bank_transfer,
                            closing_balance=closing_balance,
                            prev_date=prev_date,
                            next_date=next_date,
@@ -778,26 +1327,62 @@ def add_entry():
     amount_str = request.form.get('amount', '').strip()
     notes = request.form.get('notes', '').strip()
     payment_type = request.form.get('payment_type', 'cash').strip()
-    category = request.form.get('category', 'other').strip()
+    confirm_duplicate = request.form.get('confirm_duplicate') == '1'
+    salesman_id_raw = request.form.get('salesman_id', '').strip()
 
-    # Validate payment_type
-    if payment_type not in ('cash', 'online'):
+    # Validate payment_type (Cash / Online / Bank Slip)
+    if payment_type not in ('cash', 'online', 'bank_slip'):
         payment_type = 'cash'
 
-    # Validate category (only for expenses)
-    valid_categories = ('food', 'transport', 'bank', 'utility', 'zakat', 'other')
-    if category not in valid_categories:
+    # --- Resolve salesman for recovery entries ---
+    # STRICT: the form MUST send a valid salesman_id that maps to an
+    # existing, active salesman. We do NOT auto-create from typed text —
+    # new salesmen must go through the PIN-protected creation flow at
+    # /api/salesmen/create. This prevents silently bypassing the PIN by
+    # just typing a new name and clicking Save.
+    salesman_id = None
+    if entry_type == 'recovery':
+        sid = 0
+        if salesman_id_raw:
+            try:
+                sid = int(salesman_id_raw)
+            except (ValueError, TypeError):
+                sid = 0
+        if sid <= 0:
+            flash('Please select or create a valid salesman first.', 'error')
+            return redirect(url_for('daily', date=entry_date or date.today().isoformat()))
+
+        sm_row = db.execute(
+            'SELECT id, name, is_active FROM salesmen WHERE id = ?',
+            (sid,)
+        ).fetchone()
+        if sm_row is None:
+            flash('Please select or create a valid salesman first.', 'error')
+            return redirect(url_for('daily', date=entry_date or date.today().isoformat()))
+        if not sm_row['is_active']:
+            flash('That salesman is inactive. Reactivate it first from the Salesmen page.',
+                  'error')
+            return redirect(url_for('daily', date=entry_date or date.today().isoformat()))
+
+        salesman_id = sm_row['id']
+        description = sm_row['name']
+
+    # Auto-detect category from description for expenses.
+    # Bank Slip payment type always classifies as 'bank' regardless of text.
+    if entry_type == 'expense':
+        if payment_type == 'bank_slip':
+            category = 'bank'
+        else:
+            category = detect_category(description)
+    else:
         category = 'other'
 
-    # Handle receipt file upload
-    receipt_filename = None
-    receipt_file = request.files.get('receipt')
-    if receipt_file and receipt_file.filename:
-        original_name = secure_filename(receipt_file.filename)
-        # Add timestamp to avoid duplicates
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        receipt_filename = f'{timestamp}_{original_name}'
-        receipt_file.save(os.path.join(app.config['UPLOAD_FOLDER'], receipt_filename))
+    # Handle receipt file upload (validated: jpg/jpeg/png, ≤5 MB, uuid name)
+    try:
+        receipt_filename = save_receipt_file(request.files.get('receipt'))
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('daily', date=entry_date or date.today().isoformat()))
 
     # --- Validation ---
 
@@ -846,19 +1431,293 @@ def add_entry():
         return redirect(url_for('add_entry_form', type=entry_type,
                                 date=entry_date))
 
+    # --- Duplicate guard ---
+    # If an identical row (same date + type + amount + description) already
+    # exists and the user has not explicitly confirmed, block the save and
+    # let the UI re-prompt.
+    if not confirm_duplicate:
+        dup = db.execute('''
+            SELECT id FROM daily_entries
+            WHERE is_deleted = 0
+              AND date = ? AND type = ? AND amount = ?
+              AND LOWER(TRIM(description)) = LOWER(TRIM(?))
+            LIMIT 1
+        ''', (entry_date, entry_type, amount, description)).fetchone()
+        if dup is not None:
+            flash('Possible duplicate entry — confirm again to save it anyway.',
+                  'warning')
+            return redirect(url_for('daily', date=entry_date))
+
     # --- Save the entry ---
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     db.execute('''
         INSERT INTO daily_entries (date, type, amount, description, notes,
-                                   is_deleted, created_at, payment_type, receipt, category)
-        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                                   is_deleted, created_at, payment_type, receipt,
+                                   category, salesman_id)
+        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
     ''', (entry_date, entry_type, amount, description, notes, created_at,
-          payment_type, receipt_filename, category))
+          payment_type, receipt_filename, category, salesman_id))
     db.commit()
     _reports_cache.clear()
 
     flash(f'{entry_type.capitalize()} entry saved.', 'success')
     return redirect(url_for('daily', date=entry_date))
+
+
+@app.route('/api/check-duplicate')
+@login_required
+def api_check_duplicate():
+    """Lightweight duplicate pre-check used by the Add Entry forms.
+
+    JSON: {duplicate: bool}. Match is same date + type + amount +
+    case-insensitive trimmed description on a non-deleted row.
+    """
+    db = get_db()
+    entry_date = request.args.get('date', '').strip()
+    entry_type = request.args.get('type', '').strip()
+    description = request.args.get('description', '').strip()
+    amount_str = request.args.get('amount', '').strip()
+
+    if entry_type not in ('recovery', 'expense'):
+        return {'duplicate': False}
+    try:
+        amount = int(amount_str)
+    except (ValueError, TypeError):
+        return {'duplicate': False}
+    if not entry_date or not description or amount <= 0:
+        return {'duplicate': False}
+
+    if entry_type == 'recovery':
+        description = ' '.join(description.split()).title()
+
+    row = db.execute('''
+        SELECT id FROM daily_entries
+        WHERE is_deleted = 0
+          AND date = ? AND type = ? AND amount = ?
+          AND LOWER(TRIM(description)) = LOWER(TRIM(?))
+        LIMIT 1
+    ''', (entry_date, entry_type, amount, description)).fetchone()
+    return {'duplicate': row is not None}
+
+
+# --- Salesmen API + Management ---
+
+@app.route('/api/salesmen')
+@login_required
+def api_salesmen():
+    """Autocomplete endpoint — returns active salesmen matching a query.
+
+    Query params:
+      q     — optional substring filter (case-insensitive)
+      limit — max rows (default 10, hard cap 50)
+    """
+    db = get_db()
+    q = request.args.get('q', '').strip()
+    try:
+        limit = int(request.args.get('limit', '10'))
+    except (ValueError, TypeError):
+        limit = 10
+    limit = max(1, min(limit, 50))
+
+    if q:
+        rows = db.execute('''
+            SELECT id, name
+            FROM salesmen
+            WHERE is_active = 1 AND name LIKE ? COLLATE NOCASE
+            ORDER BY name ASC
+            LIMIT ?
+        ''', (f'%{q}%', limit)).fetchall()
+    else:
+        rows = db.execute('''
+            SELECT id, name
+            FROM salesmen
+            WHERE is_active = 1
+            ORDER BY name ASC
+            LIMIT ?
+        ''', (limit,)).fetchall()
+
+    return jsonify([{'id': r['id'], 'name': r['name']} for r in rows])
+
+
+@app.route('/api/salesmen/create', methods=['POST'])
+@login_required
+def api_salesmen_create():
+    """Create a new salesman from the Add Recovery flow.
+
+    PIN-protected: the caller must supply the admin PIN (same PIN used for
+    day close/reopen). Accepts form or JSON payload with `name` and `pin`.
+    If a salesman with the same name already exists (case-insensitive) it
+    is reactivated and returned rather than creating a duplicate.
+    Returns {id, name, created:bool} on success, 401 on bad PIN.
+    """
+    db = get_db()
+    payload = request.get_json(silent=True) or {}
+    raw = request.form.get('name') or payload.get('name') or ''
+    pin = request.form.get('pin') or payload.get('pin') or ''
+    name = canonical_salesman_name(raw)
+    if not name:
+        return jsonify({'error': 'Name is required.'}), 400
+    if len(name) > 80:
+        return jsonify({'error': 'Name is too long.'}), 400
+
+    if not verify_admin_pin(db, pin.strip()):
+        return jsonify({'error': 'Incorrect PIN.'}), 401
+
+    existing = db.execute(
+        'SELECT id, name, is_active FROM salesmen WHERE name = ? COLLATE NOCASE',
+        (name,)
+    ).fetchone()
+    if existing:
+        if not existing['is_active']:
+            db.execute('UPDATE salesmen SET is_active = 1 WHERE id = ?',
+                       (existing['id'],))
+            db.commit()
+        return jsonify({'id': existing['id'], 'name': existing['name'],
+                        'created': False})
+
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cur = db.execute(
+        'INSERT INTO salesmen (name, is_active, created_at) VALUES (?, 1, ?)',
+        (name, created_at)
+    )
+    db.commit()
+    return jsonify({'id': cur.lastrowid, 'name': name, 'created': True})
+
+
+@app.route('/salesmen')
+@login_required
+def salesmen_page():
+    """Salesman Management — list with activate/deactivate/rename actions."""
+    db = get_db()
+    rows = db.execute('''
+        SELECT s.id, s.name, s.is_active,
+               COALESCE(e.total_recovered, 0) AS total_recovered,
+               COALESCE(e.entries, 0)          AS entries,
+               e.last_date                     AS last_date
+        FROM salesmen s
+        LEFT JOIN (
+            SELECT salesman_id,
+                   SUM(amount)  AS total_recovered,
+                   COUNT(*)     AS entries,
+                   MAX(date)    AS last_date
+            FROM daily_entries
+            WHERE type = 'recovery' AND is_deleted = 0
+              AND salesman_id IS NOT NULL
+            GROUP BY salesman_id
+        ) e ON e.salesman_id = s.id
+        ORDER BY s.is_active DESC, s.name ASC
+    ''').fetchall()
+
+    active_count = sum(1 for r in rows if r['is_active'])
+    inactive_count = len(rows) - active_count
+
+    return render_template('salesmen.html',
+                           salesmen=rows,
+                           active_count=active_count,
+                           inactive_count=inactive_count,
+                           total_count=len(rows))
+
+
+@app.route('/salesmen/add', methods=['POST'])
+@login_required
+def salesmen_add():
+    """Add a new salesman from the management page form."""
+    db = get_db()
+    name = canonical_salesman_name(request.form.get('name', ''))
+    if not name:
+        flash('Salesman name is required.', 'error')
+        return redirect(url_for('salesmen_page'))
+    if len(name) > 80:
+        flash('Name is too long (max 80 characters).', 'error')
+        return redirect(url_for('salesmen_page'))
+
+    existing = db.execute(
+        'SELECT id, is_active FROM salesmen WHERE name = ? COLLATE NOCASE',
+        (name,)
+    ).fetchone()
+    if existing:
+        if not existing['is_active']:
+            db.execute('UPDATE salesmen SET is_active = 1 WHERE id = ?',
+                       (existing['id'],))
+            db.commit()
+            flash(f'"{name}" reactivated.', 'success')
+        else:
+            flash(f'"{name}" already exists.', 'warning')
+        return redirect(url_for('salesmen_page'))
+
+    created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    db.execute(
+        'INSERT INTO salesmen (name, is_active, created_at) VALUES (?, 1, ?)',
+        (name, created_at)
+    )
+    db.commit()
+    flash(f'Salesman "{name}" added.', 'success')
+    return redirect(url_for('salesmen_page'))
+
+
+@app.route('/salesmen/<int:salesman_id>/toggle', methods=['POST'])
+@login_required
+def salesmen_toggle(salesman_id):
+    """Activate / deactivate a salesman. Never hard-delete."""
+    db = get_db()
+    row = db.execute('SELECT id, name, is_active FROM salesmen WHERE id = ?',
+                     (salesman_id,)).fetchone()
+    if row is None:
+        flash('Salesman not found.', 'error')
+        return redirect(url_for('salesmen_page'))
+
+    new_state = 0 if row['is_active'] else 1
+    db.execute('UPDATE salesmen SET is_active = ? WHERE id = ?',
+               (new_state, salesman_id))
+    db.commit()
+    if new_state:
+        flash(f'"{row["name"]}" activated.', 'success')
+    else:
+        flash(f'"{row["name"]}" deactivated — hidden from new entries.', 'info')
+    return redirect(url_for('salesmen_page'))
+
+
+@app.route('/salesmen/<int:salesman_id>/rename', methods=['POST'])
+@login_required
+def salesmen_rename(salesman_id):
+    """Rename a salesman. Also updates the description column on existing
+    linked recovery rows so older entries keep the new spelling, since the
+    reports page still displays the description field in the daily table."""
+    db = get_db()
+    row = db.execute('SELECT id, name FROM salesmen WHERE id = ?',
+                     (salesman_id,)).fetchone()
+    if row is None:
+        flash('Salesman not found.', 'error')
+        return redirect(url_for('salesmen_page'))
+
+    new_name = canonical_salesman_name(request.form.get('name', ''))
+    if not new_name:
+        flash('Salesman name is required.', 'error')
+        return redirect(url_for('salesmen_page'))
+    if len(new_name) > 80:
+        flash('Name is too long (max 80 characters).', 'error')
+        return redirect(url_for('salesmen_page'))
+
+    # Prevent renaming onto another existing salesman (case-insensitive)
+    clash = db.execute(
+        '''SELECT id FROM salesmen
+           WHERE name = ? COLLATE NOCASE AND id != ?''',
+        (new_name, salesman_id)
+    ).fetchone()
+    if clash:
+        flash(f'Another salesman is already named "{new_name}".', 'error')
+        return redirect(url_for('salesmen_page'))
+
+    db.execute('UPDATE salesmen SET name = ? WHERE id = ?',
+               (new_name, salesman_id))
+    db.execute('''UPDATE daily_entries
+                  SET description = ?
+                  WHERE salesman_id = ? AND type = 'recovery' ''',
+               (new_name, salesman_id))
+    db.commit()
+    _reports_cache.clear()
+    flash(f'Renamed "{row["name"]}" → "{new_name}".', 'success')
+    return redirect(url_for('salesmen_page'))
 
 
 # --- Step 8: Edit and Delete ---
@@ -871,7 +1730,8 @@ def edit_entry(entry_id):
 
     # Look up the entry (must exist and not be deleted)
     entry = db.execute('''SELECT id, date, type, amount, description,
-                                 notes, payment_type, receipt, category
+                                 notes, payment_type, receipt, category,
+                                 salesman_id
                           FROM daily_entries
                           WHERE id = ? AND is_deleted = 0''',
                        (entry_id,)).fetchone()
@@ -893,6 +1753,34 @@ def edit_entry(entry_id):
     description = request.form.get('description', '').strip()
     amount_str = request.form.get('amount', '').strip()
     notes = request.form.get('notes', '').strip()
+    salesman_id_raw = request.form.get('salesman_id', '').strip()
+
+    # Recovery entries must reference an existing active salesman.
+    # No auto-create, no free-text fallback — same rules as add_entry.
+    new_salesman_id = None
+    if entry['type'] == 'recovery':
+        try:
+            sid = int(salesman_id_raw)
+        except (ValueError, TypeError):
+            sid = 0
+        if sid <= 0:
+            flash('Please select a valid salesman.', 'error')
+            return render_template('edit_entry.html', entry=entry)
+
+        sm_row = db.execute(
+            'SELECT id, name, is_active FROM salesmen WHERE id = ?',
+            (sid,)
+        ).fetchone()
+        if sm_row is None:
+            flash('Please select a valid salesman.', 'error')
+            return render_template('edit_entry.html', entry=entry)
+        if not sm_row['is_active']:
+            flash('That salesman is inactive. Reactivate it first from the Salesmen page.',
+                  'error')
+            return render_template('edit_entry.html', entry=entry)
+
+        new_salesman_id = sm_row['id']
+        description = sm_row['name']
 
     # Also block if user tries to move the entry into a closed day
     if is_day_closed(entry_date):
@@ -913,12 +1801,9 @@ def edit_entry(entry_id):
         flash('Future dates are not allowed.', 'error')
         return render_template('edit_entry.html', entry=entry)
 
-    # Description is required
+    # Description is required (expense path only — recovery already validated above)
     if not description:
-        if entry['type'] == 'recovery':
-            flash('Salesman name is required.', 'error')
-        else:
-            flash('Description is required.', 'error')
+        flash('Description is required.', 'error')
         return render_template('edit_entry.html', entry=entry)
 
     # Amount must be a positive whole number
@@ -932,11 +1817,31 @@ def edit_entry(entry_id):
         flash('Amount must be greater than 0.', 'error')
         return render_template('edit_entry.html', entry=entry)
 
+    # Re-detect category from the new description for expenses,
+    # so edits keep the auto-classification in sync.
+    if entry['type'] == 'expense':
+        if (entry['payment_type'] or 'cash') == 'bank_slip':
+            new_category = 'bank'
+        else:
+            new_category = detect_category(description)
+    else:
+        new_category = entry['category'] or 'other'
+
     # --- Update the entry ---
-    db.execute('''UPDATE daily_entries
-                  SET date = ?, description = ?, amount = ?, notes = ?
-                  WHERE id = ?''',
-               (entry_date, description, amount, notes, entry_id))
+    if entry['type'] == 'recovery':
+        db.execute('''UPDATE daily_entries
+                      SET date = ?, description = ?, amount = ?, notes = ?,
+                          category = ?, salesman_id = ?
+                      WHERE id = ?''',
+                   (entry_date, description, amount, notes, new_category,
+                    new_salesman_id, entry_id))
+    else:
+        db.execute('''UPDATE daily_entries
+                      SET date = ?, description = ?, amount = ?, notes = ?,
+                          category = ?
+                      WHERE id = ?''',
+                   (entry_date, description, amount, notes, new_category,
+                    entry_id))
     db.commit()
     _reports_cache.clear()
 
@@ -971,6 +1876,42 @@ def delete_entry(entry_id):
 
     flash('Entry deleted.', 'info')
     return redirect(url_for('daily', date=entry['date']))
+
+
+# --- Debug: DB migration status (login-gated) ---
+
+@app.route('/debug/db-status')
+@login_required
+def debug_db_status():
+    """JSON view of the DB migration state. Login-gated so the schema
+    version and history aren't exposed publicly. Intended for debugging
+    after an upgrade or backup restore."""
+    db = get_db()
+    status = get_db_status(db)
+    return jsonify({
+        'db_version':       status['version'],
+        'expected_version': status['expected_version'],
+        'up_to_date':       status['up_to_date'],
+        'status_text':      status['status_text'],
+        'migration_logs': [
+            {'step': row['step'], 'run_at': row['run_at']}
+            for row in status['logs']
+        ],
+    })
+
+
+@app.route('/debug/integrity')
+@login_required
+def debug_integrity():
+    """JSON view of data-integrity issues. Read-only — nothing is modified.
+    Login-gated so the report isn't exposed publicly."""
+    db = get_db()
+    result = run_integrity_checks(db)
+    return jsonify({
+        'status':       result['status'],
+        'total_issues': result['total_issues'],
+        'issues':       result['issues'],
+    })
 
 
 # --- Step 9: Settings Page ---
@@ -1049,103 +1990,123 @@ def settings():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Show dashboard with totals, monthly breakdown, and best/worst months."""
+    """Minimal Owner Dashboard — today and this month at a glance.
+    Reuses `_compute_reports_data` for all figures so there's no duplicate
+    aggregation logic with /reports or the monthly PDF.
+    """
     db = get_db()
-
     business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
 
-    # Overall totals (all non-deleted entries)
-    totals = db.execute('''
-        SELECT
-            COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0)
-                AS total_income,
-            COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
-                AS total_expense
-        FROM daily_entries
-        WHERE is_deleted = 0
-    ''').fetchone()
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    month_start = today.replace(day=1)
+    seven_start = today - timedelta(days=6)
 
-    total_income = totals['total_income']
-    total_expense = totals['total_expense']
-    net_profit = total_income - total_expense
+    today_iso = today.isoformat()
+    yesterday_iso = yesterday.isoformat()
+    month_start_iso = month_start.isoformat()
+    seven_start_iso = seven_start.isoformat()
 
-    # Monthly breakdown — group by year-month
-    rows = db.execute('''
-        SELECT
-            strftime('%Y', date) AS year,
-            strftime('%m', date) AS month,
-            COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0)
-                AS income,
-            COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0)
-                AS expense
-        FROM daily_entries
-        WHERE is_deleted = 0
-        GROUP BY strftime('%Y', date), strftime('%m', date)
-        ORDER BY year ASC, month ASC
-    ''').fetchall()
+    # Three windows from the shared helper.
+    today_ctx = _compute_reports_data(db, business_name, today_iso, today_iso)
+    month_ctx = _compute_reports_data(db, business_name, month_start_iso, today_iso)
+    trend_ctx = _compute_reports_data(db, business_name, seven_start_iso, today_iso)
 
-    # Build monthly_data list with profit calculated
-    month_names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    top_today = today_ctx['top_salesmen'][0] if today_ctx['top_salesmen'] else None
+    top_month = month_ctx['top_salesmen'][0] if month_ctx['top_salesmen'] else None
 
-    monthly_data = []
-    for row in rows:
-        m = int(row['month'])
-        y = int(row['year'])
-        income = row['income']
-        expense = row['expense']
-        profit = income - expense
-        monthly_data.append({
-            'year': y,
-            'month': m,
-            'month_name': month_names[m],
-            'label': f"{month_names[m]} {y}",
-            'income': income,
-            'expense': expense,
-            'profit': profit,
+    # Yesterday totals come from the 7-day daily breakdown.
+    yest_recovery = 0
+    yest_expense = 0
+    for d in trend_ctx['daily_data']:
+        if d['date'] == yesterday_iso:
+            yest_recovery = d['recovery']
+            yest_expense = d['expense']
+            break
+
+    alerts = []
+    if yest_expense > 0 and today_ctx['total_expense'] > yest_expense:
+        delta = today_ctx['total_expense'] - yest_expense
+        alerts.append({
+            'level': 'warning',
+            'text': f"Today's expenses are higher than yesterday by {format_pkr(delta)}."
+        })
+    if yest_recovery > 0 and today_ctx['total_recovery'] < yest_recovery:
+        delta = yest_recovery - today_ctx['total_recovery']
+        alerts.append({
+            'level': 'warning',
+            'text': f"Today's recovery is lower than yesterday by {format_pkr(delta)}."
+        })
+    if today_ctx['closing_balance'] < 0:
+        alerts.append({
+            'level': 'error',
+            'text': f"Cash on hand is negative: {format_pkr(today_ctx['closing_balance'])}."
         })
 
-    # Best and worst months by profit
-    best_month = None
-    worst_month = None
-    if monthly_data:
-        best_month = max(monthly_data, key=lambda x: x['profit'])
-        worst_month = min(monthly_data, key=lambda x: x['profit'])
+    # Percentage change vs yesterday. None when yesterday is 0 (no baseline).
+    def _pct_change(today_val, yest_val):
+        if yest_val <= 0:
+            return None
+        return int(round((today_val - yest_val) * 100.0 / yest_val))
 
-    # Category-wise expense totals (skip categories with 0)
-    cat_rows = db.execute('''
-        SELECT COALESCE(category, 'other') AS cat, SUM(amount) AS total
-        FROM daily_entries
-        WHERE type = 'expense' AND is_deleted = 0
-        GROUP BY cat
-        ORDER BY total DESC
-    ''').fetchall()
+    recovery_pct = _pct_change(today_ctx['total_recovery'], yest_recovery)
+    expense_pct = _pct_change(today_ctx['total_expense'], yest_expense)
 
-    category_labels = {
-        'food': 'Food / Tea',
-        'transport': 'Transport',
-        'bank': 'Bank Slip',
-        'utility': 'Utility Bill',
-        'zakat': 'Zakat / Charity',
-        'other': 'Other',
-    }
-    category_totals = []
-    for row in cat_rows:
-        if row['total'] > 0:
-            category_totals.append({
-                'name': category_labels.get(row['cat'], row['cat'].capitalize()),
-                'amount': row['total'],
+    # Sparkline points for the 7-day closing-balance trend.
+    trend_dates = trend_ctx['chart_dates']
+    trend_balances = trend_ctx['chart_balance']
+    trend_points = []
+    trend_empty = (
+        trend_ctx['total_recovery'] == 0
+        and trend_ctx['total_expense'] == 0
+        and trend_ctx['total_bank_transfer'] == 0
+    )
+    width, height, pad = 560, 90, 10
+    baseline_y = height - pad
+    if len(trend_balances) >= 2:
+        bmin = min(trend_balances)
+        bmax = max(trend_balances)
+        n = len(trend_balances)
+        flat = (bmax == bmin)
+        for i, b in enumerate(trend_balances):
+            x = pad + (i * (width - 2 * pad) / (n - 1))
+            if flat:
+                # All values equal — draw a centred horizontal line instead of
+                # pinning to the top edge (which looked like clipped dots).
+                y = height / 2
+            else:
+                y = pad + (height - 2 * pad) * (1 - (b - bmin) / (bmax - bmin))
+            trend_points.append({
+                'x': round(x, 1),
+                'y': round(y, 1),
+                'balance': b,
+                'date': trend_dates[i],
             })
 
     return render_template('dashboard.html',
                            business_name=business_name,
-                           total_income=total_income,
-                           total_expense=total_expense,
-                           net_profit=net_profit,
-                           monthly_data=monthly_data,
-                           best_month=best_month,
-                           worst_month=worst_month,
-                           category_totals=category_totals)
+                           today_iso=today_iso,
+                           month_start_iso=month_start_iso,
+                           today_recovery=today_ctx['total_recovery'],
+                           today_expense=today_ctx['total_expense'],
+                           today_bank_transfer=today_ctx['total_bank_transfer'],
+                           today_closing=today_ctx['closing_balance'],
+                           yest_recovery=yest_recovery,
+                           yest_expense=yest_expense,
+                           recovery_pct=recovery_pct,
+                           expense_pct=expense_pct,
+                           month_recovery=month_ctx['total_recovery'],
+                           month_expense=month_ctx['total_expense'],
+                           month_bank_transfer=month_ctx['total_bank_transfer'],
+                           month_closing=month_ctx['closing_balance'],
+                           top_today=top_today,
+                           top_month=top_month,
+                           trend_points=trend_points,
+                           trend_empty=trend_empty,
+                           trend_baseline_y=baseline_y,
+                           alerts=alerts,
+                           pdf_year=today.year,
+                           pdf_month=today.month)
 
 
 # --- Reports ---
@@ -1157,132 +2118,450 @@ _REPORTS_CACHE_TTL = 8       # seconds
 _CHART_DAY_LIMIT = 30        # max data points shown in charts
 
 
-@app.route('/reports')
-@login_required
-def reports():
-    """Show daily summaries with recovery, expense, and profit."""
+def _preload_dashboard_cache(db):
+    """Warm the three report ranges /dashboard renders so the first visit
+    after login is served entirely from cache. Best-effort — any failure
+    here is swallowed so it can never block the login redirect.
+    """
+    try:
+        business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
+        today = date.today()
+        today_iso = today.isoformat()
+        month_start_iso = today.replace(day=1).isoformat()
+        seven_start_iso = (today - timedelta(days=6)).isoformat()
+        for d_from in (today_iso, month_start_iso, seven_start_iso):
+            _compute_reports_data(db, business_name, d_from, today_iso)
+    except Exception:
+        pass
 
-    # --- Check cache ---
-    date_from = request.args.get('from', '').strip()
-    date_to = request.args.get('to', '').strip()
-    cache_key = f'{date_from or "none"}_{date_to or "none"}'
+
+def _compute_reports_data(db, business_name, date_from, date_to):
+    """Build the reports context dict for a given date range.
+
+    Results are cached in-memory for _REPORTS_CACHE_TTL seconds, keyed on
+    (business_name, date_from, date_to). Mutations invalidate the cache via
+    `_reports_cache.clear()` in add/edit/delete/settings routes.
+    """
+    cache_key = (business_name, date_from or '', date_to or '')
     now = time.time()
+    hit = _reports_cache.get(cache_key)
+    if hit and hit[0] > now:
+        # Shallow copy so route-specific additions don't pollute the cache
+        return dict(hit[1])
 
-    if cache_key in _reports_cache:
-        expiry, cached_ctx = _reports_cache[cache_key]
-        if expiry > now:
-            return render_template('reports.html', **cached_ctx)
-        del _reports_cache[cache_key]
+    ctx = _compute_reports_data_uncached(db, business_name, date_from, date_to)
 
-    # --- Compute from DB ---
-    db = get_db()
-    business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
+    # Evict expired entries + hard cap to keep memory bounded
+    for k in [k for k, (exp, _) in _reports_cache.items() if exp <= now]:
+        _reports_cache.pop(k, None)
+    if len(_reports_cache) > 20:
+        _reports_cache.clear()
 
-    # Overall totals
-    overall_sql = '''
-        SELECT
-            COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0)
-                AS total_recovery,
-            COALESCE(SUM(CASE WHEN type = 'expense'  THEN amount ELSE 0 END), 0)
-                AS total_expense
-        FROM daily_entries
-        WHERE is_deleted = 0
-    '''
-    overall_params = []
+    _reports_cache[cache_key] = (now + _REPORTS_CACHE_TTL, ctx)
+    return dict(ctx)
 
-    # Daily breakdown
+
+def _compute_reports_data_uncached(db, business_name, date_from, date_to):
+    """Actual DB-backed computation. Callers should prefer the cached wrapper."""
+    # Opening balance at the start of the filter range
+    if date_from:
+        period_opening = get_opening_balance(db, date_from)
+    else:
+        period_opening = int(get_setting(db, 'opening_balance') or 0)
+
+    # Single daily-breakdown query. Overall totals are derived from these
+    # rows in Python to save a second table scan.
     daily_sql = '''
         SELECT
             date,
             COALESCE(SUM(CASE WHEN type = 'recovery' THEN amount ELSE 0 END), 0)
                 AS recovery,
-            COALESCE(SUM(CASE WHEN type = 'expense'  THEN amount ELSE 0 END), 0)
-                AS expense
+            COALESCE(SUM(CASE WHEN type = 'expense'
+                               AND COALESCE(payment_type, 'cash') != 'bank_slip'
+                               THEN amount ELSE 0 END), 0)
+                AS expense,
+            COALESCE(SUM(CASE WHEN type = 'expense'
+                               AND COALESCE(payment_type, 'cash') = 'bank_slip'
+                               THEN amount ELSE 0 END), 0)
+                AS bank_transfer
         FROM daily_entries
         WHERE is_deleted = 0
     '''
     daily_params = []
-
-    # Apply date filters if provided
     if date_from:
-        overall_sql += ' AND date >= ?'
-        overall_params.append(date_from)
         daily_sql += ' AND date >= ?'
         daily_params.append(date_from)
     if date_to:
-        overall_sql += ' AND date <= ?'
-        overall_params.append(date_to)
         daily_sql += ' AND date <= ?'
         daily_params.append(date_to)
+    daily_sql += ' GROUP BY date ORDER BY date ASC'
 
-    daily_sql += ' GROUP BY date ORDER BY date DESC'
-
-    overall = db.execute(overall_sql, overall_params).fetchone()
-    total_recovery = overall['total_recovery']
-    total_expense = overall['total_expense']
-    total_profit = total_recovery - total_expense
-
-    rows = db.execute(daily_sql, daily_params).fetchall()
-    daily_data = []
+    rows = execute_timed(db, daily_sql, daily_params).fetchall()
+    daily_data_asc = []
+    running = period_opening
+    total_recovery = 0
+    total_expense = 0
+    total_bank_transfer = 0
     for row in rows:
         rec = row['recovery']
         exp = row['expense']
-        daily_data.append({
+        bt = row['bank_transfer']
+        total_recovery += rec
+        total_expense += exp
+        total_bank_transfer += bt
+        running += rec - exp - bt
+        daily_data_asc.append({
             'date': row['date'],
             'recovery': rec,
             'expense': exp,
-            'profit': rec - exp,
+            'bank_transfer': bt,
+            'balance': running,
         })
+    closing_balance = period_opening + total_recovery - total_expense - total_bank_transfer
 
-    # Insights — best day, worst day, average profit
+    # Display table is DESC (newest first)
+    daily_data = list(reversed(daily_data_asc))
+
+    # Cash-based insights — best recovery day, highest expense day, highest balance day
     insights = None
-    if daily_data:
-        best = max(daily_data, key=lambda d: d['profit'])
-        worst = min(daily_data, key=lambda d: d['profit'])
-        avg_profit = round(sum(d['profit'] for d in daily_data) / len(daily_data))
+    if daily_data_asc:
+        best_rec = None
+        high_exp = None
+        high_bal = None
+        for d in daily_data_asc:
+            if d['recovery'] > 0 and (best_rec is None or d['recovery'] > best_rec['recovery']):
+                best_rec = d
+            if d['expense'] > 0 and (high_exp is None or d['expense'] > high_exp['expense']):
+                high_exp = d
+            if high_bal is None or d['balance'] > high_bal['balance']:
+                high_bal = d
         insights = {
-            'best_date': best['date'],
-            'best_profit': best['profit'],
-            'worst_date': worst['date'],
-            'worst_profit': worst['profit'],
-            'avg_profit': avg_profit,
-            'num_days': len(daily_data),
+            'best_recovery_date': best_rec['date'] if best_rec else None,
+            'best_recovery_amount': best_rec['recovery'] if best_rec else 0,
+            'highest_expense_date': high_exp['date'] if high_exp else None,
+            'highest_expense_amount': high_exp['expense'] if high_exp else 0,
+            'highest_balance_date': high_bal['date'] if high_bal else None,
+            'highest_balance_amount': high_bal['balance'] if high_bal else 0,
+            'num_days': len(daily_data_asc),
         }
 
     # Chart data — chronological order (ASC), capped to last N days
-    chart_dates = [d['date'] for d in reversed(daily_data)]
-    chart_recovery = [d['recovery'] for d in reversed(daily_data)]
-    chart_expense = [d['expense'] for d in reversed(daily_data)]
-    chart_profit = [d['profit'] for d in reversed(daily_data)]
+    chart_dates = [d['date'] for d in daily_data_asc]
+    chart_recovery = [d['recovery'] for d in daily_data_asc]
+    chart_expense = [d['expense'] for d in daily_data_asc]
+    chart_balance = [d['balance'] for d in daily_data_asc]
 
     chart_dates = chart_dates[-_CHART_DAY_LIMIT:]
     chart_recovery = chart_recovery[-_CHART_DAY_LIMIT:]
     chart_expense = chart_expense[-_CHART_DAY_LIMIT:]
-    chart_profit = chart_profit[-_CHART_DAY_LIMIT:]
+    chart_balance = chart_balance[-_CHART_DAY_LIMIT:]
 
-    # --- Build context and cache it ---
-    ctx = dict(business_name=business_name,
-               total_recovery=total_recovery,
-               total_expense=total_expense,
-               total_profit=total_profit,
-               daily_data=daily_data,
-               date_from=date_from,
-               date_to=date_to,
-               insights=insights,
-               chart_dates=chart_dates,
-               chart_recovery=chart_recovery,
-               chart_expense=chart_expense,
-               chart_profit=chart_profit)
+    # --- Expense breakdown by (category, payment_type) in ONE pass ---
+    # The UI needs two separate aggregates (category totals, payment totals).
+    # We fold them from a single grouped scan to avoid two table hits.
+    # Business rule 4: bank_slip is a cash-to-bank transfer, not an expense,
+    # so it's excluded from category totals but included in payment totals.
+    breakdown_sql = '''
+        SELECT COALESCE(category, 'other')       AS cat,
+               COALESCE(payment_type, 'cash')    AS pt,
+               COALESCE(SUM(amount), 0)          AS total
+        FROM daily_entries
+        WHERE is_deleted = 0 AND type = 'expense'
+    '''
+    breakdown_params = []
+    if date_from:
+        breakdown_sql += ' AND date >= ?'
+        breakdown_params.append(date_from)
+    if date_to:
+        breakdown_sql += ' AND date <= ?'
+        breakdown_params.append(date_to)
+    breakdown_sql += ' GROUP BY cat, pt'
 
-    # Evict stale entries (keep cache small)
-    for k in [k for k, (exp, _) in _reports_cache.items() if exp <= now]:
-        del _reports_cache[k]
+    category_display = {
+        'food':      'Food / Tea',
+        'transport': 'Transport',
+        'bank':      'Bank Slip',
+        'utility':   'Utility Bill',
+        'zakat':     'Zakat / Charity',
+        'other':     'Other',
+    }
+    category_breakdown = {c: 0 for c in VALID_CATEGORIES}
+    payment_breakdown = {'cash': 0, 'online': 0, 'bank_slip': 0}
+    for r in execute_timed(db, breakdown_sql, breakdown_params).fetchall():
+        pay_key = r['pt'] if r['pt'] in payment_breakdown else 'cash'
+        payment_breakdown[pay_key] += r['total']
+        if pay_key != 'bank_slip':
+            cat_key = r['cat'] if r['cat'] in category_breakdown else 'other'
+            category_breakdown[cat_key] += r['total']
 
-    # Safety guard — prevent unbounded growth
-    if len(_reports_cache) > 20:
-        _reports_cache.clear()
+    category_totals = [
+        {'key': k, 'name': category_display[k], 'amount': category_breakdown[k]}
+        for k in VALID_CATEGORIES
+        if category_breakdown[k] > 0
+    ]
+    category_totals.sort(key=lambda x: x['amount'], reverse=True)
 
-    _reports_cache[cache_key] = (now + _REPORTS_CACHE_TTL, ctx)
+    # --- Salesman performance (grouped by salesman_id via JOIN) ---
+    # Modern rows carry salesman_id. Legacy recovery rows that predate the
+    # migration may still have NULL salesman_id — those are grouped under
+    # their trimmed description so historical reports stay complete.
+    sm_sql = '''
+        SELECT s.id            AS sid,
+               s.name          AS name,
+               s.is_active     AS is_active,
+               COALESCE(SUM(e.amount), 0) AS total,
+               COUNT(e.id)                AS entries
+        FROM salesmen s
+        JOIN daily_entries e
+          ON e.salesman_id = s.id
+         AND e.type = 'recovery'
+         AND e.is_deleted = 0
+    '''
+    sm_params = []
+    if date_from:
+        sm_sql += ' AND e.date >= ?'
+        sm_params.append(date_from)
+    if date_to:
+        sm_sql += ' AND e.date <= ?'
+        sm_params.append(date_to)
+    sm_sql += ' GROUP BY s.id, s.name, s.is_active ORDER BY total DESC'
+
+    sm_rows = execute_timed(db, sm_sql, sm_params).fetchall()
+    salesmen = [
+        {
+            'id': r['sid'],
+            'name': r['name'],
+            'is_active': bool(r['is_active']),
+            'total': r['total'],
+            'entries': r['entries'],
+        }
+        for r in sm_rows if r['total'] > 0
+    ]
+
+    # Legacy fallback: pre-migration recovery rows with NULL salesman_id
+    legacy_sql = '''
+        SELECT TRIM(description) AS name,
+               COALESCE(SUM(amount), 0) AS total,
+               COUNT(*) AS entries
+        FROM daily_entries
+        WHERE is_deleted = 0 AND type = 'recovery'
+          AND salesman_id IS NULL
+          AND TRIM(COALESCE(description, '')) != ''
+    '''
+    legacy_params = []
+    if date_from:
+        legacy_sql += ' AND date >= ?'
+        legacy_params.append(date_from)
+    if date_to:
+        legacy_sql += ' AND date <= ?'
+        legacy_params.append(date_to)
+    legacy_sql += ' GROUP BY TRIM(LOWER(description))'
+
+    legacy_rows = execute_timed(db, legacy_sql, legacy_params).fetchall()
+    # Merge legacy rows into the list by name (case-insensitive)
+    by_name = {s['name'].lower(): s for s in salesmen}
+    for r in legacy_rows:
+        key = (r['name'] or '').strip().lower()
+        if not key:
+            continue
+        if key in by_name:
+            by_name[key]['total'] += r['total']
+            by_name[key]['entries'] += r['entries']
+        else:
+            salesmen.append({
+                'id': None,
+                'name': r['name'].strip(),
+                'is_active': True,
+                'total': r['total'],
+                'entries': r['entries'],
+            })
+    salesmen.sort(key=lambda s: s['total'], reverse=True)
+    top_salesmen = salesmen[:3]
+
+    # Chart data for salesman bar chart (cap at top 10 for readability)
+    chart_salesmen_labels = [s['name'] for s in salesmen[:10]]
+    chart_salesmen_values = [s['total'] for s in salesmen[:10]]
+
+    # --- Build context dict ---
+    return dict(business_name=business_name,
+                period_opening=period_opening,
+                total_recovery=total_recovery,
+                total_expense=total_expense,
+                total_bank_transfer=total_bank_transfer,
+                closing_balance=closing_balance,
+                daily_data=daily_data,
+                date_from=date_from,
+                date_to=date_to,
+                insights=insights,
+                chart_dates=chart_dates,
+                chart_recovery=chart_recovery,
+                chart_expense=chart_expense,
+                chart_balance=chart_balance,
+                category_totals=category_totals,
+                payment_breakdown=payment_breakdown,
+                salesmen=salesmen,
+                top_salesmen=top_salesmen,
+                chart_salesmen_labels=chart_salesmen_labels,
+                chart_salesmen_values=chart_salesmen_values)
+
+
+# --- Expense Drill-down (category + payment breakdown with entry list) ---
+
+_CATEGORY_LABELS = {
+    'food':      'Food',
+    'transport': 'Transport',
+    'bank':      'Bank / Cheque',
+    'utility':   'Utility',
+    'zakat':     'Zakat / Charity',
+    'other':     'Other',
+}
+
+_PAYMENT_LABELS = {
+    'cash':      'Cash',
+    'online':    'Online',
+    'bank_slip': 'Bank Slip',
+}
+
+
+@app.route('/expenses/details')
+@login_required
+def expense_details():
+    """Drill-down view for the dashboard Expense / Bank Transfer cards.
+    Shows category totals, payment-type totals, and the full entry list
+    filtered by date range. Read-only — no mutations."""
+    db = get_db()
+    business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
+
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    # Date range — defaults to current month if not supplied.
+    date_from = (request.args.get('from') or month_start.isoformat()).strip()
+    date_to = (request.args.get('to') or today.isoformat()).strip()
+
+    # Which card the user came from. Used only for heading emphasis —
+    # the page always shows both breakdowns and the full entry list.
+    view_type = request.args.get('type', 'category').strip()
+    if view_type not in ('category', 'payment'):
+        view_type = 'category'
+
+    # Totals come from a grouped aggregate over the FULL range. Per business
+    # rule 4, bank_slip is a cash-to-bank transfer, not an expense, so it's
+    # excluded from category + expense totals but reported separately.
+    total_expense = 0
+    total_bank_transfer = 0
+    category_totals = {}
+    payment_totals = {'cash': 0, 'online': 0, 'bank_slip': 0}
+    total_rows = 0
+    for r in execute_timed(db, '''
+        SELECT COALESCE(category, 'other')       AS cat,
+               COALESCE(payment_type, 'cash')    AS pt,
+               COALESCE(SUM(amount), 0)          AS total,
+               COUNT(*)                          AS n
+        FROM daily_entries
+        WHERE type = 'expense'
+          AND is_deleted = 0
+          AND date >= ? AND date <= ?
+        GROUP BY cat, pt
+    ''', (date_from, date_to)).fetchall():
+        pt = r['pt'] if r['pt'] in payment_totals else 'cash'
+        payment_totals[pt] += r['total']
+        total_rows += r['n']
+        if pt == 'bank_slip':
+            total_bank_transfer += r['total']
+        else:
+            total_expense += r['total']
+            category_totals[r['cat']] = category_totals.get(r['cat'], 0) + r['total']
+
+    # Hard cap on the entry list to keep the page responsive on large ranges.
+    # Summary cards above still reflect the full date range.
+    _ROW_LIMIT = 1000
+    truncated = total_rows > _ROW_LIMIT
+    rows = execute_timed(db, '''
+        SELECT id, date, description, notes,
+               COALESCE(category, 'other')       AS category,
+               COALESCE(payment_type, 'cash')    AS payment_type,
+               amount
+        FROM daily_entries
+        WHERE type = 'expense'
+          AND is_deleted = 0
+          AND date >= ? AND date <= ?
+        ORDER BY date DESC, id DESC
+        LIMIT ?
+    ''', (date_from, date_to, _ROW_LIMIT)).fetchall()
+
+    category_list = sorted(
+        [{'key': k,
+          'label': _CATEGORY_LABELS.get(k, k.title()),
+          'total': v}
+         for k, v in category_totals.items()],
+        key=lambda x: -x['total'],
+    )
+
+    payment_list = [
+        {'key': k,
+         'label': _PAYMENT_LABELS.get(k, k.title()),
+         'total': payment_totals.get(k, 0)}
+        for k in ('cash', 'online', 'bank_slip')
+    ]
+
+    # Quick-filter anchors.
+    last_month_end = month_start - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+
+    # Enrich rows for the template (JSON-safe dicts + pretty labels).
+    entries = []
+    for r in rows:
+        entries.append({
+            'id':            r['id'],
+            'date':          r['date'],
+            'description':   r['description'],
+            'notes':         r['notes'],
+            'category':      r['category'],
+            'category_label': _CATEGORY_LABELS.get(r['category'], r['category'].title()),
+            'payment_type':  r['payment_type'],
+            'payment_label': _PAYMENT_LABELS.get(r['payment_type'], r['payment_type'].title()),
+            'amount':        int(r['amount'] or 0),
+        })
+
+    return render_template('expense_details.html',
+                           business_name=business_name,
+                           date_from=date_from,
+                           date_to=date_to,
+                           view_type=view_type,
+                           entries=entries,
+                           total_expense=total_expense,
+                           total_bank_transfer=total_bank_transfer,
+                           payment_list=payment_list,
+                           category_list=category_list,
+                           total_rows=total_rows,
+                           row_limit=_ROW_LIMIT,
+                           truncated=truncated,
+                           today_iso=today.isoformat(),
+                           month_start_iso=month_start.isoformat(),
+                           last_month_start_iso=last_month_start.isoformat(),
+                           last_month_end_iso=last_month_end.isoformat())
+
+
+@app.route('/reports')
+@login_required
+def reports():
+    """Show daily summaries with recovery, expense, and closing balance.
+    Caching happens inside _compute_reports_data (8s TTL, cleared on mutation)."""
+    date_from = request.args.get('from', '').strip()
+    date_to = request.args.get('to', '').strip()
+
+    db = get_db()
+    business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
+    ctx = _compute_reports_data(db, business_name, date_from, date_to)
+
+    # PDF picker defaults (current month/year, with a short year range).
+    # Added on the per-request copy returned by the cached helper — the
+    # cached dict itself is a shallow copy so this doesn't leak.
+    today = date.today()
+    ctx['pdf_default_month'] = today.month
+    ctx['pdf_default_year'] = today.year
+    ctx['pdf_years'] = list(range(today.year, today.year - 5, -1))
 
     return render_template('reports.html', **ctx)
 
@@ -1560,6 +2839,20 @@ def restore_backup():
 
         # Step 6: Replace the active database with the validated upload
         shutil.move(temp_path, DATABASE)
+
+        # Step 7: Patch schema on the restored DB — old backups may be
+        # missing the salesmen table, salesman_id column, or the
+        # payment_type / receipt / category columns added after v1.0.
+        # Migrations are idempotent; failures don't abort the restore
+        # since the next app startup will retry.
+        try:
+            patch_conn = sqlite3.connect(DATABASE)
+            run_migrations(patch_conn)
+            patch_conn.close()
+        except Exception:
+            log_path = os.path.join(BASE_PATH, 'restore_migrate_error.log')
+            with open(log_path, 'w') as f:
+                f.write(traceback.format_exc())
 
         flash(
             f'System restored successfully. Previous data saved as {safety_name}. Reloading\u2026',
@@ -2195,6 +3488,266 @@ def change_pin():
     return redirect(url_for('settings'))
 
 
+# --- Monthly Summary PDF (clean, minimal B/W style) ---
+
+def _build_monthly_pdf_bytes(db, year, month):
+    """Build the clean monthly summary PDF for the given year/month.
+    Uses the same report data as /reports — no duplicated computation.
+
+    Design rules (per UX spec): white background, black text, subtle gray
+    borders, bold section headings, simple table grids, A4 portrait.
+    Returns a BytesIO positioned at 0.
+    """
+    from calendar import monthrange
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer)
+
+    # Date range for the month (clamp end to today for the current month)
+    last_day = monthrange(year, month)[1]
+    first = date(year, month, 1)
+    last = date(year, month, last_day)
+    today = date.today()
+    if last > today:
+        last = today
+
+    date_from = first.isoformat()
+    date_to = last.isoformat()
+
+    business_name = get_setting(db, 'business_name') or 'Waqar & Brothers'
+    data = _compute_reports_data(db, business_name, date_from, date_to)
+
+    # Minimal monochrome palette
+    BLACK     = colors.HexColor('#000000')
+    TEXT      = colors.HexColor('#111111')
+    MUTED     = colors.HexColor('#555555')
+    GRID      = colors.HexColor('#BBBBBB')
+    GRID_LT   = colors.HexColor('#DDDDDD')
+    HEADER_BG = colors.HexColor('#F5F5F5')
+
+    base = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'MT', parent=base['Normal'],
+        fontName='Helvetica-Bold', fontSize=20, leading=24,
+        textColor=BLACK, alignment=TA_CENTER, spaceAfter=2)
+    subtitle_style = ParagraphStyle(
+        'MSub', parent=base['Normal'],
+        fontName='Helvetica-Bold', fontSize=13, leading=16,
+        textColor=TEXT, alignment=TA_CENTER, spaceAfter=2)
+    period_style = ParagraphStyle(
+        'MPeriod', parent=base['Normal'],
+        fontName='Helvetica', fontSize=11, leading=14,
+        textColor=MUTED, alignment=TA_CENTER, spaceAfter=4)
+    section_style = ParagraphStyle(
+        'MSection', parent=base['Normal'],
+        fontName='Helvetica-Bold', fontSize=13, leading=17,
+        textColor=BLACK, alignment=TA_LEFT, spaceBefore=18, spaceAfter=8)
+    empty_style = ParagraphStyle(
+        'Empty', parent=base['Normal'],
+        fontName='Helvetica-Oblique', fontSize=10, textColor=MUTED,
+        spaceAfter=4)
+
+    def plain_table_style(header_row=True):
+        cmds = [
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TEXTCOLOR', (0, 0), (-1, -1), TEXT),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.4, GRID_LT),
+            ('BOX', (0, 0), (-1, -1), 0.6, GRID),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        ]
+        if header_row:
+            cmds += [
+                ('BACKGROUND', (0, 0), (-1, 0), HEADER_BG),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10.5),
+                ('TEXTCOLOR', (0, 0), (-1, 0), BLACK),
+                ('LINEBELOW', (0, 0), (-1, 0), 0.8, BLACK),
+                ('TOPPADDING', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ]
+        return TableStyle(cmds)
+
+    elements = []
+
+    # Header: business name (large) + "Monthly Financial Report" + period
+    elements.append(Paragraph(business_name, title_style))
+    elements.append(Paragraph('Monthly Financial Report', subtitle_style))
+    elements.append(Paragraph(first.strftime('%B %Y'), period_style))
+
+    # Thin rule under header
+    rule = Table([['']], colWidths=[174*mm])
+    rule.setStyle(TableStyle([
+        ('LINEBELOW', (0, 0), (-1, 0), 0.6, BLACK),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(Spacer(1, 6))
+    elements.append(rule)
+
+    # Summary — last row (Closing Balance) rendered bold + larger
+    elements.append(Paragraph('Summary', section_style))
+    summary = [
+        ['Item', 'Amount (PKR)'],
+        ['Opening Balance',  format_pkr(data['period_opening'])],
+        ['Total Recovery',   format_pkr(data['total_recovery'])],
+        ['Total Expenses',   format_pkr(data['total_expense'])],
+        ['Bank Transfer',    format_pkr(data['total_bank_transfer'])],
+        ['Closing Balance',  format_pkr(data['closing_balance'])],
+    ]
+    st = Table(summary, colWidths=[114*mm, 60*mm])
+    style = plain_table_style(header_row=True)
+    # Closing Balance row: bold + slightly larger, with a top rule
+    style.add('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold')
+    style.add('FONTSIZE', (0, -1), (-1, -1), 12)
+    style.add('TOPPADDING', (0, -1), (-1, -1), 11)
+    style.add('BOTTOMPADDING', (0, -1), (-1, -1), 11)
+    style.add('LINEABOVE', (0, -1), (-1, -1), 0.8, BLACK)
+    # Also bold the Total Recovery and Total Expenses rows
+    style.add('FONTNAME', (0, 2), (-1, 2), 'Helvetica-Bold')
+    style.add('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold')
+    st.setStyle(style)
+    elements.append(st)
+
+    # Expense by Category
+    elements.append(Paragraph('Expense by Category', section_style))
+    if data['category_totals']:
+        rows = [['Category', 'Amount (PKR)']]
+        for cat in data['category_totals']:
+            rows.append([cat['name'], format_pkr(cat['amount'])])
+        tcat = Table(rows, colWidths=[114*mm, 60*mm])
+        tcat.setStyle(plain_table_style(header_row=True))
+        elements.append(tcat)
+    else:
+        elements.append(Paragraph('No expenses recorded this month.', empty_style))
+
+    # Top Salesmen
+    elements.append(Paragraph('Top Salesmen', section_style))
+    top3 = data['top_salesmen'][:3]
+    if top3:
+        rows = [['Rank', 'Salesman', 'Total Recovery (PKR)']]
+        for i, sm in enumerate(top3, start=1):
+            rows.append([str(i), sm['name'], format_pkr(sm['total'])])
+        tsm = Table(rows, colWidths=[22*mm, 92*mm, 60*mm])
+        tsm_style = plain_table_style(header_row=True)
+        tsm_style.add('ALIGN', (0, 0), (0, -1), 'CENTER')
+        tsm.setStyle(tsm_style)
+        elements.append(tsm)
+    else:
+        elements.append(Paragraph('No recovery recorded this month.', empty_style))
+
+    # Daily Summary
+    elements.append(Paragraph('Daily Summary', section_style))
+    if data['daily_data']:
+        rows = [['Date', 'Recovery (PKR)', 'Expense (PKR)', 'Closing (PKR)']]
+        # daily_data is newest-first; show oldest-first in the PDF
+        for d in reversed(data['daily_data']):
+            rows.append([
+                d['date'],
+                format_pkr(d['recovery']),
+                format_pkr(d['expense']),
+                format_pkr(d['balance']),
+            ])
+        tdaily = Table(rows, colWidths=[36*mm, 46*mm, 46*mm, 46*mm],
+                       repeatRows=1)
+        tdaily_style = plain_table_style(header_row=True)
+        tdaily_style.add('ALIGN', (1, 0), (-1, -1), 'RIGHT')
+        tdaily_style.add('ALIGN', (0, 0), (0, -1), 'CENTER')
+        tdaily.setStyle(tdaily_style)
+        elements.append(tdaily)
+    else:
+        elements.append(Paragraph('No entries recorded this month.', empty_style))
+
+    # Canvas that draws timestamp (bottom-left) and "Page X of Y" (bottom-right)
+    # on every page. This is the minimal equivalent of the styled NumberedCanvas.
+    gen_time = datetime.now().strftime('%d %b %Y, %I:%M %p').lstrip('0')
+    generated_line = f'Generated on: {gen_time}'
+    brand_line = business_name
+
+    from reportlab.pdfgen import canvas as _pdf_canvas
+
+    class MonoFooterCanvas(_pdf_canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            total = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self._draw_footer(total)
+                super().showPage()
+            super().save()
+
+        def _draw_footer(self, total_pages):
+            w, h = self._pagesize
+            # Footer top rule
+            self.setStrokeColor(GRID_LT)
+            self.setLineWidth(0.4)
+            self.line(18*mm, 14*mm, w - 18*mm, 14*mm)
+            # Timestamp (left) and brand (center)
+            self.setFont('Helvetica', 8)
+            self.setFillColor(MUTED)
+            self.drawString(18*mm, 9*mm, generated_line)
+            self.drawCentredString(w / 2, 9*mm, brand_line)
+            # Page X of Y (right)
+            self.drawRightString(
+                w - 18*mm, 9*mm,
+                f'Page {self._pageNumber} of {total_pages}')
+
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output, pagesize=A4,
+        leftMargin=18*mm, rightMargin=18*mm,
+        topMargin=18*mm, bottomMargin=22*mm,
+        title=f'Monthly Financial Report - {first.strftime("%B %Y")}',
+        author=business_name)
+    doc.build(elements, canvasmaker=MonoFooterCanvas)
+    output.seek(0)
+    return output
+
+
+@app.route('/reports/monthly.pdf')
+@login_required
+def reports_monthly_pdf():
+    """Download a clean monthly summary PDF for the requested year/month."""
+    today = date.today()
+    try:
+        year = int(request.args.get('year', today.year))
+        month = int(request.args.get('month', today.month))
+        if not (1 <= month <= 12):
+            raise ValueError
+        # Reasonable bounds to prevent abuse
+        if year < 2000 or year > today.year + 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        flash('Invalid year or month.', 'error')
+        return redirect(url_for('reports'))
+
+    db = get_db()
+    pdf_bytes = _build_monthly_pdf_bytes(db, year, month)
+    from calendar import month_name
+    filename = f'monthly-report-{year}-{month:02d}.pdf'
+    return send_file(
+        pdf_bytes,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/pdf')
+
+
 # --- Export to PDF ---
 
 @app.route('/export/pdf')
@@ -2258,7 +3811,7 @@ def export_pdf():
 
             total_recovery = sum(r['amount'] for r in recoveries)
             elements.append(Spacer(1, 6))
-            tt = Table([['Total Income', format_pkr(total_recovery)]],
+            tt = Table([['Total Recovery', format_pkr(total_recovery)]],
                        colWidths=[330, 120])
             tt.setStyle(_pdf_totals_row_style(c['green_bg'], c['green_accent'],
                                                c['green']))
@@ -2343,7 +3896,7 @@ def export_pdf():
             ORDER BY date ASC, id ASC
         ''', (month_str, year_str)).fetchall()
 
-        total_income = 0
+        total_recovery = 0
         total_expense = 0
 
         if rows:
@@ -2359,7 +3912,7 @@ def export_pdf():
                     format_pkr(row['amount']),
                 ])
                 if row['type'] == 'recovery':
-                    total_income += row['amount']
+                    total_recovery += row['amount']
                 else:
                     total_expense += row['amount']
 
@@ -2371,11 +3924,11 @@ def export_pdf():
                                        s['base']['Normal']))
 
         # SUMMARY
-        net = opening_balance + total_income - total_expense
+        net = opening_balance + total_recovery - total_expense
         _pdf_section_heading(elements, 'Summary', c)
         summary_data = [
             ['Opening Balance', format_pkr(opening_balance)],
-            ['+ Total Income', format_pkr(total_income)],
+            ['+ Total Recovery', format_pkr(total_recovery)],
             ['\u2013  Total Expenses', format_pkr(total_expense)],
             ['= Closing Balance', format_pkr(net)],
         ]

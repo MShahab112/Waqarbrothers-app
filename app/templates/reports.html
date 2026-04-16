@@ -11,14 +11,14 @@
             {% if date_from or date_to %}
                 Showing {{ date_from or 'start' }} to {{ date_to or 'today' }}
             {% else %}
-                All-time financial summary
+                All-time cash summary
             {% endif %}
         </div>
     </div>
 </div>
 
 <!-- Date Filter -->
-<div class="card" style="margin-bottom: 28px;">
+<div class="card" style="margin-bottom: 16px;">
     <form method="GET" action="{{ url_for('reports') }}" class="filter-form">
         <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
             <label for="from">From</label>
@@ -35,50 +35,102 @@
     </form>
 </div>
 
+<!-- Monthly PDF Export -->
+{% set _now = current_date if current_date else None %}
+<div class="card" style="margin-bottom: 28px;">
+    <form method="GET" action="{{ url_for('reports_monthly_pdf') }}" class="filter-form" target="_blank">
+        <div class="form-group" style="margin-bottom: 0; flex: 0 0 160px;">
+            <label for="pdf_month">Month</label>
+            <select id="pdf_month" name="month" class="filter-input">
+                {% set months = [
+                    (1, 'January'), (2, 'February'), (3, 'March'), (4, 'April'),
+                    (5, 'May'), (6, 'June'), (7, 'July'), (8, 'August'),
+                    (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December')
+                ] %}
+                {% for num, name in months %}
+                <option value="{{ num }}" {% if num == pdf_default_month %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0; flex: 0 0 120px;">
+            <label for="pdf_year">Year</label>
+            <select id="pdf_year" name="year" class="filter-input">
+                {% for y in pdf_years %}
+                <option value="{{ y }}" {% if y == pdf_default_year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="align-self: flex-end;">
+            <span class="btn-icon">&#128196;</span> Download Monthly PDF
+        </button>
+    </form>
+</div>
+
 <!-- Overall Summary Cards -->
 <div class="summary-cards">
     <div class="summary-stat-card green">
-        <div class="stat-label">Total Recovery</div>
+        <div class="stat-label">Total Recovery <span class="stat-trend up">&#9650;</span></div>
         <div class="stat-value mono" data-value="{{ total_recovery }}">{{ total_recovery|pkr }}</div>
     </div>
     <div class="summary-stat-card red">
-        <div class="stat-label">Total Expenses</div>
+        <div class="stat-label">Total Expenses <span class="stat-trend down">&#9660;</span></div>
         <div class="stat-value mono" data-value="{{ total_expense }}">{{ total_expense|pkr }}</div>
     </div>
     <div class="summary-stat-card highlight">
-        <div class="stat-label">Total Profit</div>
-        <div class="stat-value mono {% if total_profit < 0 %}negative-balance{% endif %}" data-value="{{ total_profit }}">{{ total_profit|pkr }}</div>
+        <div class="stat-label">Closing Balance</div>
+        <div class="stat-value mono {% if closing_balance < 0 %}negative-balance{% endif %}" data-value="{{ closing_balance }}">{{ closing_balance|pkr }}</div>
     </div>
 </div>
 
-<!-- Insights Panel -->
+{% if total_bank_transfer and total_bank_transfer > 0 %}
+<div class="bank-transfer-strip">
+    <span class="bt-icon">&#127974;</span>
+    <span class="bt-label">Bank Transfers (excluded from expenses)</span>
+    <span class="bt-amount mono amt-bank">{{ total_bank_transfer|pkr }}</span>
+</div>
+{% endif %}
+
+<!-- Cash Insights Panel -->
 {% if insights %}
 <div class="card" style="margin-top: 24px; padding: 24px 28px;">
-    <div class="section-title" style="margin-bottom: 18px; font-size: 15px;">🔍 Insights
+    <div class="section-title" style="margin-bottom: 18px; font-size: 15px;">🔍 Cash Insights
         <span style="font-weight: 400; color: var(--text3); font-size: 12px; margin-left: 6px;">{{ insights.num_days }} day{{ 's' if insights.num_days != 1 }}</span>
     </div>
     <div class="insights-grid">
         <div class="insight-card insight-best">
             <div class="insight-icon">▲</div>
             <div class="insight-body">
-                <div class="insight-label">Best Day</div>
-                <div class="insight-date">{{ insights.best_date|monthday }}</div>
-                <div class="insight-value mono recovery" data-value="{{ insights.best_profit }}">{{ insights.best_profit|pkr }}</div>
+                <div class="insight-label">Best Recovery Day</div>
+                {% if insights.best_recovery_date %}
+                <div class="insight-date">{{ insights.best_recovery_date|monthday }}</div>
+                <div class="insight-value mono recovery" data-value="{{ insights.best_recovery_amount }}">{{ insights.best_recovery_amount|pkr }}</div>
+                {% else %}
+                <div class="insight-value mono" style="opacity: 0.5;">—</div>
+                {% endif %}
             </div>
         </div>
         <div class="insight-card insight-worst">
             <div class="insight-icon">▼</div>
             <div class="insight-body">
-                <div class="insight-label">Worst Day</div>
-                <div class="insight-date">{{ insights.worst_date|monthday }}</div>
-                <div class="insight-value mono {% if insights.worst_profit >= 0 %}recovery{% else %}negative{% endif %}" data-value="{{ insights.worst_profit }}">{{ insights.worst_profit|pkr }}</div>
+                <div class="insight-label">Highest Expense Day</div>
+                {% if insights.highest_expense_date %}
+                <div class="insight-date">{{ insights.highest_expense_date|monthday }}</div>
+                <div class="insight-value mono negative" data-value="{{ insights.highest_expense_amount }}">{{ insights.highest_expense_amount|pkr }}</div>
+                {% else %}
+                <div class="insight-value mono" style="opacity: 0.5;">—</div>
+                {% endif %}
             </div>
         </div>
         <div class="insight-card insight-avg">
-            <div class="insight-icon">◼</div>
+            <div class="insight-icon">◆</div>
             <div class="insight-body">
-                <div class="insight-label">Avg. Daily Profit</div>
-                <div class="insight-value mono {% if insights.avg_profit >= 0 %}recovery{% else %}negative{% endif %}" data-value="{{ insights.avg_profit }}">{{ insights.avg_profit|pkr }}</div>
+                <div class="insight-label">Highest Closing Balance</div>
+                {% if insights.highest_balance_date %}
+                <div class="insight-date">{{ insights.highest_balance_date|monthday }}</div>
+                <div class="insight-value mono {% if insights.highest_balance_amount >= 0 %}recovery{% else %}negative{% endif %}" data-value="{{ insights.highest_balance_amount }}">{{ insights.highest_balance_amount|pkr }}</div>
+                {% else %}
+                <div class="insight-value mono" style="opacity: 0.5;">—</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -95,12 +147,12 @@
 </div>
 {% endif %}
 {% if daily_data %}
-<!-- Profit Trend — Full Width -->
+<!-- Balance Trend — Full Width -->
 <div class="card" style="margin-top: 24px; padding: 24px;">
-    <div class="section-title" style="margin-bottom: 16px; font-size: 15px;">📈 Daily Profit Trend</div>
+    <div class="section-title" style="margin-bottom: 16px; font-size: 15px;">💹 Balance Trend</div>
     <div class="chart-container">
         <div class="chart-skeleton"></div>
-        <canvas id="profitChart"></canvas>
+        <canvas id="cashFlowChart"></canvas>
     </div>
 </div>
 
@@ -112,6 +164,192 @@
         <canvas id="barChart"></canvas>
     </div>
 </div>
+
+<!-- Expense by Category + Bank vs Cash Summary (side by side) -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px;">
+    <!-- Expense by Category -->
+    <div class="card" style="padding: 24px;">
+        <div class="section-header" style="border-top: none; padding-top: 0;">
+            <div class="section-title">💰 Expense by Category</div>
+        </div>
+        {% if category_totals %}
+            {% for cat in category_totals %}
+            <div class="summary-row cat-row cat-{{ cat.key }}">
+                <span class="summary-label"><span class="cat-dot"></span>{{ cat.name }}</span>
+                <span class="summary-amount mono">{{ cat.amount|pkr }}</span>
+            </div>
+            {% endfor %}
+            <div class="section-total" style="margin-top: 12px;">
+                <span>Total Expenses</span>
+                <span class="amount mono amt-expense">{{ total_expense|pkr }}</span>
+            </div>
+        {% else %}
+            <div class="empty-msg">
+                <div class="empty-text">No expenses in this period.</div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Bank vs Cash Summary -->
+    <div class="card" style="padding: 24px;">
+        <div class="section-header" style="border-top: none; padding-top: 0;">
+            <div class="section-title">🏦 Bank vs Cash Summary</div>
+        </div>
+        <div class="summary-row pay-row pay-cash">
+            <span class="summary-label"><span class="pay-dot cash"></span>Total Cash Expense</span>
+            <span class="summary-amount mono">{{ payment_breakdown.cash|pkr }}</span>
+        </div>
+        <div class="summary-row pay-row pay-online">
+            <span class="summary-label"><span class="pay-dot online"></span>Total Online Expense</span>
+            <span class="summary-amount mono">{{ payment_breakdown.online|pkr }}</span>
+        </div>
+        <div class="summary-row pay-row pay-bank">
+            <span class="summary-label"><span class="pay-dot bank"></span>Total Bank Transfer</span>
+            <span class="summary-amount mono">{{ payment_breakdown.bank_slip|pkr }}</span>
+        </div>
+        <div class="section-total" style="margin-top: 12px;">
+            <span>Combined</span>
+            <span class="amount mono amt-neutral">{{ (payment_breakdown.cash + payment_breakdown.online + payment_breakdown.bank_slip)|pkr }}</span>
+        </div>
+    </div>
+</div>
+
+{% if salesmen %}
+<!-- Top Salesmen + Salesman Chart -->
+<div class="card" style="margin-top: 20px; padding: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">🏆 Top Salesmen</div>
+    </div>
+    <div class="insights-grid" style="grid-template-columns: repeat(3, 1fr);">
+        {% for s in top_salesmen %}
+        <div class="insight-card medal-{{ loop.index }}">
+            <div class="insight-icon">{% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% else %}🥉{% endif %}</div>
+            <div class="insight-body">
+                <div class="insight-label">#{{ loop.index }} {{ s.name }}</div>
+                <div class="insight-value mono">{{ s.total|pkr }}</div>
+                <div class="insight-date">{{ s.entries }} entr{{ 'y' if s.entries == 1 else 'ies' }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Salesman Recovery Chart -->
+<div class="card" style="margin-top: 20px; padding: 24px;">
+    <div class="section-title" style="margin-bottom: 16px; font-size: 15px;">📈 Salesman Recovery</div>
+    <div class="chart-container">
+        <canvas id="salesmanChart"></canvas>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (typeof Chart === 'undefined') return;
+    var smLabels = {{ chart_salesmen_labels|tojson }} || [];
+    var smValues = {{ chart_salesmen_values|tojson }} || [];
+    if (!smLabels.length) return;
+    var canvas = document.getElementById('salesmanChart');
+    if (!canvas) return;
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (window.salesmanChart && typeof window.salesmanChart.destroy === "function") {
+        window.salesmanChart.destroy();
+    }
+    window.salesmanChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: smLabels,
+            datasets: [{
+                label: 'Recovery',
+                data: smValues,
+                backgroundColor: isDark ? 'rgba(48, 209, 88, 0.6)' : 'rgba(36, 138, 61, 0.65)',
+                borderColor: isDark ? '#30D158' : '#248A3D',
+                borderWidth: 1,
+                borderRadius: 6,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
+                    titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
+                    bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                    borderWidth: 1,
+                    cornerRadius: 12,
+                    padding: 14,
+                    callbacks: {
+                        label: function (ctx) {
+                            return ' Recovery:  Rs. ' + ctx.parsed.x.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: isDark ? '#6e6e73' : '#aeaeb2',
+                        font: { size: 11 },
+                        callback: function (v) { return 'Rs. ' + v.toLocaleString(); }
+                    },
+                    grid: {
+                        color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'
+                    }
+                },
+                y: {
+                    ticks: { color: isDark ? '#a1a1a6' : '#6e6e73', font: { size: 12, weight: '600' } },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+});
+</script>
+
+<!-- Salesman Performance Table -->
+<div class="card" style="margin-top: 20px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">👨‍💼 Salesman Performance</div>
+        <div style="font-size: 13px; color: var(--text3); font-weight: 500;">{{ salesmen|length }} salesman{{ '' if salesmen|length == 1 else 'ies' if salesmen|length != 1 }}</div>
+    </div>
+    <div style="overflow-x: auto; border-radius: 12px;">
+        <table class="entries-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Salesman</th>
+                    <th style="text-align: right;">Entries</th>
+                    <th style="text-align: right;">Total Recovery</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in salesmen %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><strong>{{ s.name }}</strong></td>
+                    <td style="text-align: right;">{{ s.entries }}</td>
+                    <td style="text-align: right;">
+                        <span class="mono recovery">{{ s.total|pkr }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="border-top: 2px solid var(--border2);">
+                    <td colspan="3"><strong>Total</strong></td>
+                    <td style="text-align: right;">
+                        <strong class="mono recovery">{{ total_recovery|pkr }}</strong>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+{% endif %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -125,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var dates = {{ chart_dates|tojson }} || [];
     var recovery = {{ chart_recovery|tojson }} || [];
     var expense = {{ chart_expense|tojson }} || [];
-    var profit = {{ chart_profit|tojson }} || [];
+    var balance = {{ chart_balance|tojson }} || [];
 
     if (!dates.length) return;
 
@@ -214,28 +452,28 @@ document.addEventListener('DOMContentLoaded', function () {
         plugins: sharedPlugins
     };
 
-    /* --- Profit Line Chart --- */
+    /* --- Daily Cash Flow Line Chart (running closing balance) --- */
     try {
-        var profitCanvas = document.getElementById('profitChart');
-        if (profitCanvas) {
-            if (window.profitChart && typeof window.profitChart.destroy === "function") {
-                window.profitChart.destroy();
+        var cashCanvas = document.getElementById('cashFlowChart');
+        if (cashCanvas) {
+            if (window.cashFlowChart && typeof window.cashFlowChart.destroy === "function") {
+                window.cashFlowChart.destroy();
             }
 
-            var pCtx = profitCanvas.getContext('2d');
-            var profitGrad = pCtx.createLinearGradient(0, 0, 0, 320);
-            profitGrad.addColorStop(0, isDark ? 'rgba(10, 132, 255, 0.25)' : 'rgba(0, 122, 255, 0.12)');
-            profitGrad.addColorStop(1, 'rgba(10, 132, 255, 0)');
+            var pCtx = cashCanvas.getContext('2d');
+            var balanceGrad = pCtx.createLinearGradient(0, 0, 0, 320);
+            balanceGrad.addColorStop(0, isDark ? 'rgba(10, 132, 255, 0.25)' : 'rgba(0, 122, 255, 0.12)');
+            balanceGrad.addColorStop(1, 'rgba(10, 132, 255, 0)');
 
-            window.profitChart = new Chart(profitCanvas, {
+            window.cashFlowChart = new Chart(cashCanvas, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Profit',
-                        data: profit,
+                        label: 'Closing Balance',
+                        data: balance,
                         borderColor: isDark ? '#0A84FF' : '#007AFF',
-                        backgroundColor: profitGrad,
+                        backgroundColor: balanceGrad,
                         fill: true,
                         tension: 0.4,
                         pointRadius: 4,
@@ -250,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
     } catch (err) {
-        console.error('Profit chart failed to render:', err);
+        console.error('Cash flow chart failed to render:', err);
     }
 
     /* --- Recovery vs Expense Bar Chart --- */
@@ -371,7 +609,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <th>Date</th>
                 <th style="text-align: right;">Recovery</th>
                 <th style="text-align: right;">Expenses</th>
-                <th style="text-align: right;">Profit</th>
+                <th style="text-align: right;">Closing Balance</th>
             </tr>
         </thead>
         <tbody>
@@ -389,8 +627,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     <span class="mono expense">{{ day.expense|pkr }}</span>
                 </td>
                 <td style="text-align: right;">
-                    <span class="mono {% if day.profit >= 0 %}recovery{% else %}negative{% endif %}">
-                        {{ day.profit|pkr }}
+                    <span class="mono {% if day.balance >= 0 %}recovery{% else %}negative{% endif %}">
+                        {{ day.balance|pkr }}
                     </span>
                 </td>
             </tr>
@@ -406,8 +644,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     <strong class="mono expense">{{ total_expense|pkr }}</strong>
                 </td>
                 <td style="text-align: right;">
-                    <strong class="mono {% if total_profit >= 0 %}recovery{% else %}negative{% endif %}">
-                        {{ total_profit|pkr }}
+                    <strong class="mono {% if closing_balance >= 0 %}recovery{% else %}negative{% endif %}">
+                        {{ closing_balance|pkr }}
                     </strong>
                 </td>
             </tr>

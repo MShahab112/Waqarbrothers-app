@@ -2,313 +2,179 @@
 {% block title %}Dashboard — {{ business_name }}{% endblock %}
 
 {% block content %}
-<!-- Page Header -->
+<!-- Header + Quick Actions -->
 <div class="page-header">
     <div>
         <div class="page-title">{{ business_name }} <span class="accent">Dashboard</span></div>
-        <div class="page-subtitle">Financial overview across all time</div>
+        <div class="page-subtitle">Business at a glance &middot; {{ today_iso }}</div>
     </div>
-    {% if monthly_data %}
-    <div style="display: flex; gap: 8px;">
-        <a href="{{ url_for('export_pdf') }}" class="btn btn-ghost"><span class="btn-icon">&#128196;</span> Export PDF</a>
-        <a href="{{ url_for('export_excel') }}" class="btn btn-ghost"><span class="btn-icon">&#128202;</span> Export Excel</a>
+    <div class="dash-actions">
+        <a href="{{ url_for('daily') }}" class="btn btn-primary">
+            <span class="btn-icon">+</span> Add Entry
+        </a>
+        <a href="{{ url_for('reports_monthly_pdf', year=pdf_year, month=pdf_month) }}"
+           target="_blank" class="btn btn-ghost">
+            <span class="btn-icon">&#128196;</span> Monthly PDF
+        </a>
+    </div>
+</div>
+
+<!-- Alerts -->
+<div class="dash-alerts">
+    {% if alerts %}
+    {% for a in alerts %}
+    <div class="flash flash-{{ a.level }}">
+        <span class="dash-alert-icon">&#9888;</span> {{ a.text }}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="dash-alerts-ok">
+        <span class="dash-alerts-ok-icon">&#10003;</span>
+        Everything looks normal today
     </div>
     {% endif %}
 </div>
 
-<!-- Summary Cards -->
-<div class="summary-cards">
-    <div class="summary-stat-card green">
-        <div class="stat-label">Total Income</div>
-        <div class="stat-value mono">{{ total_income|pkr }}</div>
-    </div>
-    <div class="summary-stat-card red">
+{% set today_link = url_for('daily', date=today_iso) %}
+{% set month_link = url_for('reports') + '?from=' + month_start_iso + '&to=' + today_iso %}
+
+<!-- TODAY -->
+<div class="section-title dash-section-title">Today</div>
+<div class="summary-cards summary-cards-4">
+    <a href="{{ today_link }}" class="summary-stat-card green dash-card-link">
+        <div class="stat-label">Recovery</div>
+        <div class="stat-value mono">{{ today_recovery|pkr }}</div>
+        {% if recovery_pct is not none %}
+        <div class="dash-trend {% if recovery_pct >= 0 %}up good{% else %}down bad{% endif %}">
+            {% if recovery_pct >= 0 %}&#8593;{% else %}&#8595;{% endif %}
+            {{ '+' if recovery_pct > 0 else '' }}{{ recovery_pct }}% vs yesterday
+        </div>
+        {% endif %}
+    </a>
+    <a href="{{ url_for('expense_details', type='category', **{'from': today_iso, 'to': today_iso}) }}"
+       class="summary-stat-card red dash-card-link">
+        <div class="stat-label">Expenses</div>
+        <div class="stat-value mono">{{ today_expense|pkr }}</div>
+        {% if expense_pct is not none %}
+        <div class="dash-trend {% if expense_pct > 0 %}up bad{% elif expense_pct < 0 %}down good{% else %}flat{% endif %}">
+            {% if expense_pct > 0 %}&#8593;{% elif expense_pct < 0 %}&#8595;{% else %}&#8212;{% endif %}
+            {{ '+' if expense_pct > 0 else '' }}{{ expense_pct }}% vs yesterday
+        </div>
+        {% endif %}
+    </a>
+    <a href="{{ url_for('expense_details', type='payment', **{'from': today_iso, 'to': today_iso}) }}"
+       class="summary-stat-card dash-card-link">
+        <div class="stat-label">Bank Transfer</div>
+        <div class="stat-value mono">{{ today_bank_transfer|pkr }}</div>
+    </a>
+    <a href="{{ today_link }}" class="summary-stat-card highlight dash-card-link">
+        <div class="stat-label">Closing Balance</div>
+        <div class="stat-value mono {% if today_closing < 0 %}negative-balance{% endif %}">
+            {{ today_closing|pkr }}
+        </div>
+    </a>
+</div>
+
+<!-- MONTH -->
+<div class="section-title dash-section-title">This Month</div>
+<div class="summary-cards summary-cards-4">
+    <a href="{{ month_link }}" class="summary-stat-card green dash-card-link">
+        <div class="stat-label">Total Recovery</div>
+        <div class="stat-value mono">{{ month_recovery|pkr }}</div>
+    </a>
+    <a href="{{ url_for('expense_details', type='category', **{'from': month_start_iso, 'to': today_iso}) }}"
+       class="summary-stat-card red dash-card-link">
         <div class="stat-label">Total Expenses</div>
-        <div class="stat-value mono">{{ total_expense|pkr }}</div>
-    </div>
-    <div class="summary-stat-card highlight">
-        <div class="stat-label">Net Profit</div>
-        <div class="stat-value mono {% if net_profit < 0 %}negative-balance{% endif %}">{{ net_profit|pkr }}</div>
-    </div>
-</div>
-
-<!-- Best / Worst Month -->
-{% if best_month and worst_month %}
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px;">
-    <div class="card" style="padding: 28px; text-align: center; position: relative; overflow: hidden;">
-        <div style="font-size: 32px; margin-bottom: 10px;">🏆</div>
-        <div class="stat-label">Best Month</div>
-        <div class="stat-month" style="margin-top: 8px;">{{ best_month.label }}</div>
-        <div class="stat-value mono" style="font-size: 22px; color: var(--green); margin-top: 6px;">{{ best_month.profit|pkr }}</div>
-    </div>
-    <div class="card" style="padding: 28px; text-align: center; position: relative; overflow: hidden;">
-        <div style="font-size: 32px; margin-bottom: 10px;">📉</div>
-        <div class="stat-label">Worst Month</div>
-        <div class="stat-month" style="margin-top: 8px;">{{ worst_month.label }}</div>
-        <div class="stat-value mono {% if worst_month.profit >= 0 %}recovery{% else %}negative{% endif %}" style="font-size: 22px; margin-top: 6px;">{{ worst_month.profit|pkr }}</div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Monthly Trends Chart -->
-{% if monthly_data|length > 1 %}
-<div class="card" style="margin-top: 24px;">
-    <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">📊 Monthly Trends</div>
-    </div>
-    <div class="chart-container">
-        <canvas id="monthlyChart"></canvas>
-    </div>
-</div>
-{% endif %}
-
-<!-- Charts Row: Expenses by Category (list + pie) -->
-{% if category_totals %}
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
-    <div class="card" style="padding: 24px;">
-        <div class="section-header" style="border-top: none; padding-top: 0;">
-            <div class="section-title">💰 Expenses by Category</div>
+        <div class="stat-value mono">{{ month_expense|pkr }}</div>
+    </a>
+    <a href="{{ url_for('expense_details', type='payment', **{'from': month_start_iso, 'to': today_iso}) }}"
+       class="summary-stat-card dash-card-link">
+        <div class="stat-label">Bank Transfer</div>
+        <div class="stat-value mono">{{ month_bank_transfer|pkr }}</div>
+    </a>
+    <a href="{{ month_link }}" class="summary-stat-card highlight dash-card-link">
+        <div class="stat-label">Closing Balance</div>
+        <div class="stat-value mono {% if month_closing < 0 %}negative-balance{% endif %}">
+            {{ month_closing|pkr }}
         </div>
-        {% for cat in category_totals %}
-        <div class="summary-row">
-            <span class="summary-label">{{ cat.name }}</span>
-            <span class="summary-amount mono expense">{{ cat.amount|pkr }}</span>
+    </a>
+</div>
+
+<!-- TOP SALESMAN -->
+<div class="section-title dash-section-title">Top Salesman</div>
+<div class="dash-salesman-row">
+    <div class="card dash-salesman-card">
+        <div class="stat-label">Today</div>
+        {% if top_today %}
+        <div class="dash-sm-name">{{ top_today.name }}</div>
+        <div class="dash-sm-amount mono">{{ top_today.total|pkr }}</div>
+        <div class="dash-sm-meta">
+            {{ top_today.entries }} {{ 'entry' if top_today.entries == 1 else 'entries' }}
         </div>
+        {% else %}
+        <div class="dash-sm-empty">No recovery yet today</div>
+        {% endif %}
+    </div>
+    <div class="card dash-salesman-card">
+        <div class="stat-label">This Month</div>
+        {% if top_month %}
+        <div class="dash-sm-name">{{ top_month.name }}</div>
+        <div class="dash-sm-amount mono">{{ top_month.total|pkr }}</div>
+        <div class="dash-sm-meta">
+            {{ top_month.entries }} {{ 'entry' if top_month.entries == 1 else 'entries' }}
+        </div>
+        {% else %}
+        <div class="dash-sm-empty">No recovery this month</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 7-DAY TREND -->
+<div class="section-title dash-section-title">Last 7 Days &mdash; Closing Balance</div>
+<div class="card dash-trend-card">
+    {% set variations = [] %}
+    {% if trend_points and trend_points|length > 0 %}
+        {% set first_bal = trend_points[0].balance %}
+        {% for p in trend_points %}
+            {% if p.balance != first_bal %}
+                {% set _ = variations.append(1) %}
+            {% endif %}
         {% endfor %}
-    </div>
-    <div class="card" style="padding: 24px;">
-        <div class="section-header" style="border-top: none; padding-top: 0;">
-            <div class="section-title">📈 Expense Distribution</div>
-        </div>
-        <div style="padding: 12px 0; max-width: 300px; margin: 0 auto;">
-            <canvas id="categoryChart"></canvas>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Monthly Breakdown -->
-<div class="card" style="margin-top: 24px;">
-    <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">📋 Monthly Breakdown</div>
-    </div>
-
-    {% if monthly_data %}
-    <!-- Column Headers -->
-    <div class="monthly-breakdown-row monthly-breakdown-header">
-        <div class="monthly-col-label" style="text-align: left;">Month</div>
-        <div class="monthly-col-label" style="text-align: right;">Income</div>
-        <div class="monthly-col-label" style="text-align: right;">Expense</div>
-        <div class="monthly-col-label" style="text-align: right;">Profit</div>
-    </div>
-
-        {% for item in monthly_data %}
-        <div class="monthly-breakdown-row" style="background: none;">
-            <div class="monthly-month">
-                <a href="{{ url_for('daily', month=item.month, year=item.year) }}" class="monthly-link">{{ item.label }}</a>
-            </div>
-            <div class="entry-amount mono" style="color: var(--text); font-weight: 500; text-align: right;">{{ item.income|pkr }}</div>
-            <div class="entry-amount mono expense" style="font-weight: 500; text-align: right;">{{ item.expense|pkr }}</div>
-            <div class="entry-amount mono {% if item.profit >= 0 %}recovery{% else %}negative{% endif %}" style="text-align: right;">{{ item.profit|pkr }}</div>
-        </div>
-        {% endfor %}
-
-    <!-- Monthly Totals Row -->
-    <div class="section-total" style="margin-top: 16px;">
-        <span>All Time Total</span>
-        <span class="amount mono {% if net_profit >= 0 %}recovery{% else %}negative{% endif %}">{{ net_profit|pkr }}</span>
+    {% endif %}
+    {% if trend_empty or not trend_points or trend_points|length < 2 or variations|length == 0 %}
+    <div class="dash-trend-empty">
+        <span class="dash-trend-empty-icon">&#128200;</span>
+        No significant activity in last 7 days
     </div>
     {% else %}
-    <div class="empty-msg">
-        <span class="empty-icon">&#128200;</span>
-        <div class="empty-text">No entries recorded yet</div>
-        <div class="empty-hint">Add transactions on the Daily Page to see your dashboard</div>
+    <svg viewBox="0 0 560 90" class="dash-spark"
+         xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <!-- Subtle baseline -->
+        <line x1="10" y1="{{ trend_baseline_y }}" x2="550" y2="{{ trend_baseline_y }}"
+              stroke="var(--text2)" stroke-width="1"
+              stroke-dasharray="3 4" opacity="0.2"
+              vector-effect="non-scaling-stroke" />
+
+        <!-- Connecting line -->
+        <polyline fill="none" stroke="#666" stroke-width="2"
+                  stroke-linejoin="round" stroke-linecap="round"
+                  vector-effect="non-scaling-stroke"
+                  points="{% for p in trend_points %}{{ p.x }},{{ p.y }} {% endfor %}" />
+
+        <!-- Points with native hover tooltip -->
+        {% for p in trend_points %}
+        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4.5"
+                fill="#666" stroke="var(--card-bg)" stroke-width="1.5"
+                class="dash-spark-dot">
+            <title>Rs. {{ p.balance }}</title>
+        </circle>
+        {% endfor %}
+    </svg>
+    <div class="dash-trend-dates">
+        {% for p in trend_points %}
+        <span>{{ p.date[-5:] }}</span>
+        {% endfor %}
     </div>
     {% endif %}
 </div>
-
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-// Shared chart defaults for dark/light theme
-var cs = getComputedStyle(document.documentElement);
-var textColor = cs.getPropertyValue('--text2').trim() || '#94a3b8';
-var gridColor = cs.getPropertyValue('--border').trim() || '#333';
-var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-
-Chart.defaults.color = textColor;
-Chart.defaults.borderColor = gridColor;
-Chart.defaults.font.family = "'Inter', 'SF Pro Display', system-ui, sans-serif";
-
-{% if monthly_data|length > 1 %}
-// --- Monthly Trends Line Chart ---
-(function() {
-    var labels = [{% for item in monthly_data %}'{{ item.label }}'{% if not loop.last %}, {% endif %}{% endfor %}];
-    var incomeData = [{% for item in monthly_data %}{{ item.income }}{% if not loop.last %}, {% endif %}{% endfor %}];
-    var expenseData = [{% for item in monthly_data %}{{ item.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
-
-    var ctx = document.getElementById('monthlyChart').getContext('2d');
-
-    // Gradient fills
-    var greenGrad = ctx.createLinearGradient(0, 0, 0, 320);
-    greenGrad.addColorStop(0, isDark ? 'rgba(48, 209, 88, 0.20)' : 'rgba(36, 138, 61, 0.12)');
-    greenGrad.addColorStop(1, 'rgba(48, 209, 88, 0)');
-
-    var redGrad = ctx.createLinearGradient(0, 0, 0, 320);
-    redGrad.addColorStop(0, isDark ? 'rgba(255, 69, 58, 0.20)' : 'rgba(215, 0, 21, 0.08)');
-    redGrad.addColorStop(1, 'rgba(255, 69, 58, 0)');
-
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Income',
-                    data: incomeData,
-                    borderColor: isDark ? '#30D158' : '#248A3D',
-                    backgroundColor: greenGrad,
-                    borderWidth: 2.5,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 5,
-                    pointBackgroundColor: isDark ? '#30D158' : '#248A3D',
-                    pointBorderColor: isDark ? '#1c1c1e' : '#fff',
-                    pointBorderWidth: 2,
-                    pointHoverRadius: 7
-                },
-                {
-                    label: 'Expenses',
-                    data: expenseData,
-                    borderColor: isDark ? '#FF453A' : '#D70015',
-                    backgroundColor: redGrad,
-                    borderWidth: 2.5,
-                    tension: 0.4,
-                    fill: true,
-                    pointRadius: 5,
-                    pointBackgroundColor: isDark ? '#FF453A' : '#D70015',
-                    pointBorderColor: isDark ? '#1c1c1e' : '#fff',
-                    pointBorderWidth: 2,
-                    pointHoverRadius: 7
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: {
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        padding: 20,
-                        font: { size: 13, weight: '600' }
-                    }
-                },
-                tooltip: {
-                    backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
-                    titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
-                    bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
-                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-                    borderWidth: 1,
-                    cornerRadius: 12,
-                    padding: 14,
-                    displayColors: true,
-                    usePointStyle: true,
-                    callbacks: {
-                        label: function(c) {
-                            return ' ' + c.dataset.label + ':  PKR ' + c.parsed.y.toLocaleString('en-IN');
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { font: { size: 12, weight: '500' } }
-                },
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-                        drawBorder: false
-                    },
-                    ticks: {
-                        font: { size: 12 },
-                        callback: function(v) { return 'PKR ' + v.toLocaleString('en-IN'); }
-                    }
-                }
-            }
-        }
-    });
-})();
-{% endif %}
-
-{% if category_totals %}
-// --- Category Doughnut Chart ---
-(function() {
-    var catLabels = [{% for cat in category_totals %}'{{ cat.name }}'{% if not loop.last %}, {% endif %}{% endfor %}];
-    var catData = [{% for cat in category_totals %}{{ cat.amount }}{% if not loop.last %}, {% endif %}{% endfor %}];
-    var catColors = [
-        isDark ? '#FF453A' : '#D70015',
-        isDark ? '#FF9F0A' : '#C93400',
-        isDark ? '#FFD60A' : '#B25000',
-        isDark ? '#30D158' : '#248A3D',
-        isDark ? '#0A84FF' : '#007AFF',
-        isDark ? '#5E5CE6' : '#5856D6',
-        isDark ? '#BF5AF2' : '#AF52DE',
-        isDark ? '#64D2FF' : '#32ADE6'
-    ];
-
-    var ctx2 = document.getElementById('categoryChart').getContext('2d');
-    new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-            labels: catLabels,
-            datasets: [{
-                data: catData,
-                backgroundColor: catColors.slice(0, catLabels.length),
-                borderWidth: 3,
-                borderColor: isDark ? '#1c1c1e' : '#ffffff',
-                hoverBorderColor: isDark ? '#2c2c2e' : '#f2f2f7',
-                hoverOffset: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            cutout: '55%',
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        padding: 16,
-                        font: { size: 12, weight: '500' }
-                    }
-                },
-                tooltip: {
-                    backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
-                    titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
-                    bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
-                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-                    borderWidth: 1,
-                    cornerRadius: 12,
-                    padding: 14,
-                    callbacks: {
-                        label: function(c) {
-                            var total = c.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-                            var pct = ((c.parsed / total) * 100).toFixed(1);
-                            return ' ' + c.label + ':  PKR ' + c.parsed.toLocaleString('en-IN') + ' (' + pct + '%)';
-                        }
-                    }
-                }
-            }
-        }
-    });
-})();
-{% endif %}
-</script>
 {% endblock %}

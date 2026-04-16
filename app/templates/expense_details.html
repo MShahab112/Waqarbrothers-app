@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Expense Details — {{ business_name }}{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="page-header">
+    <div>
+        <div class="page-title">{{ business_name }} <span class="accent">Expense Details</span></div>
+        <div class="page-subtitle">
+            {{ date_from }} &rarr; {{ date_to }}
+        </div>
+    </div>
+    <div class="dash-actions">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-ghost">&laquo; Dashboard</a>
+    </div>
+</div>
+
+<!-- Date filter + quick presets -->
+<div class="card xd-filter-card">
+    <form method="GET" action="{{ url_for('expense_details') }}" class="xd-filter-form">
+        <input type="hidden" name="type" value="{{ view_type }}">
+        <div class="xd-filter-row">
+            <label class="xd-filter-field">
+                <span>From</span>
+                <input type="date" name="from" value="{{ date_from }}" required>
+            </label>
+            <label class="xd-filter-field">
+                <span>To</span>
+                <input type="date" name="to" value="{{ date_to }}" required>
+            </label>
+            <button type="submit" class="btn btn-primary">Apply</button>
+        </div>
+        <div class="xd-quick-row">
+            <a class="btn btn-ghost btn-sm"
+               href="{{ url_for('expense_details', type=view_type,
+                                **{'from': month_start_iso, 'to': today_iso}) }}">
+                This Month
+            </a>
+            <a class="btn btn-ghost btn-sm"
+               href="{{ url_for('expense_details', type=view_type,
+                                **{'from': last_month_start_iso, 'to': last_month_end_iso}) }}">
+                Last Month
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Summary cards -->
+<div class="section-title xd-section-title">Summary</div>
+<div class="summary-cards summary-cards-4">
+    <div class="summary-stat-card red">
+        <div class="stat-label">Total Expense</div>
+        <div class="stat-value mono">{{ total_expense|pkr }}</div>
+    </div>
+    {% for p in payment_list %}
+    <div class="summary-stat-card">
+        <div class="stat-label">{{ p.label }}</div>
+        <div class="stat-value mono">{{ p.total|pkr }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Category breakdown -->
+<div class="section-title xd-section-title
+            {% if view_type == 'category' %}xd-section-focus{% endif %}">
+    By Category
+</div>
+<div class="card xd-breakdown-card">
+    {% if category_list %}
+    <div class="xd-breakdown-list">
+        {% for c in category_list %}
+        {% set pct = (c.total * 100 / total_expense)|round(0, 'floor')|int
+                      if total_expense > 0 else 0 %}
+        <div class="xd-break-row">
+            <div class="xd-break-name">{{ c.label }}</div>
+            <div class="xd-break-bar">
+                <div class="xd-break-bar-fill" style="width: {{ pct }}%;"></div>
+            </div>
+            <div class="xd-break-amount mono">{{ c.total|pkr }}</div>
+            <div class="xd-break-pct">{{ pct }}%</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="xd-empty">No expense entries in this range.</div>
+    {% endif %}
+</div>
+
+<!-- Entry table -->
+<div class="section-title xd-section-title">
+    Entries ({{ entries|length }}{% if truncated %} of {{ total_rows }}{% endif %})
+</div>
+{% if truncated %}
+<div class="flash flash-warning xd-truncated-note">
+    Showing first {{ row_limit }} of {{ total_rows }} records. Narrow the date
+    range to see older entries. Totals above cover the full range.
+</div>
+{% endif %}
+<div class="card xd-table-card">
+    {% if entries %}
+    <div class="xd-table-scroll">
+        <table class="xd-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Payment</th>
+                    <th class="xd-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td class="mono xd-nowrap">{{ e.date }}</td>
+                    <td>
+                        {{ e.description }}
+                        {% if e.notes %}
+                        <div class="entry-notes">{{ e.notes }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="xd-tag xd-tag-{{ e.category }}">
+                            {{ e.category_label }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="xd-tag xd-tag-pay-{{ e.payment_type }}">
+                            {{ e.payment_label }}
+                        </span>
+                    </td>
+                    <td class="mono xd-right">{{ e.amount|pkr }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="xd-empty">No entries to show.</div>
+    {% endif %}
+</div>
+{% endblock %}

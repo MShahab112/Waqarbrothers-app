@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Salesmen — {{ business_name }}{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <div class="page-title">{{ business_name }} <span class="accent">Salesmen</span></div>
+        <div class="page-subtitle">Manage the list of salesmen used in recovery entries.</div>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary" onclick="openAddSalesmanModal()">
+            <span class="btn-icon">+</span> Add Salesman
+        </button>
+    </div>
+</div>
+
+<!-- Summary strip -->
+<div class="summary-cards summary-cards-3" style="margin-bottom: 20px;">
+    <div class="summary-stat-card">
+        <div class="stat-label">Total Salesmen</div>
+        <div class="stat-value mono">{{ total_count }}</div>
+    </div>
+    <div class="summary-stat-card green">
+        <div class="stat-label">Active</div>
+        <div class="stat-value mono">{{ active_count }}</div>
+    </div>
+    <div class="summary-stat-card red">
+        <div class="stat-label">Inactive</div>
+        <div class="stat-value mono">{{ inactive_count }}</div>
+    </div>
+</div>
+
+<!-- Active Salesmen -->
+<div class="card">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">
+            Active Salesmen <span class="count-badge">({{ active_count }})</span>
+        </div>
+    </div>
+
+    {% if active_count > 0 %}
+    <div class="salesmen-list">
+        {% for s in salesmen if s['is_active'] %}
+        <div class="entry-row salesman-row" data-salesman-id="{{ s['id'] }}">
+            <div class="entry-dot recovery"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">{{ s['name'] }}</div>
+                <div class="entry-notes">
+                    {% if s['entries'] and s['entries'] > 0 %}
+                    {{ s['entries'] }} recovery {{ 'entries' if s['entries'] != 1 else 'entry' }}
+                    &middot; Total {{ s['total_recovered']|pkr }}
+                    {% if s['last_date'] %}&middot; Last: {{ s['last_date'] }}{% endif %}
+                    {% else %}
+                    No recovery entries yet
+                    {% endif %}
+                </div>
+            </div>
+            <div class="entry-amount mono">
+                <span class="status-badge status-active">Active</span>
+            </div>
+            <div class="entry-actions">
+                <button type="button" class="btn btn-sm btn-edit"
+                        onclick="openRenameModal({{ s['id'] }}, '{{ s['name']|e }}')">&#9998; Rename</button>
+                <form method="POST" action="{{ url_for('salesmen_toggle', salesman_id=s['id']) }}"
+                      class="salesman-toggle-form" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-del">Deactivate</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-msg">
+        <span class="empty-icon">&#128100;</span>
+        <div class="empty-text">No active salesmen</div>
+        <div class="empty-hint">Click + Add Salesman to create one.</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Inactive Salesmen -->
+<div class="card salesmen-inactive-section" style="margin-top: 20px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title">
+            Inactive Salesmen <span class="count-badge">({{ inactive_count }})</span>
+        </div>
+    </div>
+
+    {% if inactive_count > 0 %}
+    <div class="salesmen-list">
+        {% for s in salesmen if not s['is_active'] %}
+        <div class="entry-row salesman-row salesman-inactive" data-salesman-id="{{ s['id'] }}">
+            <div class="entry-dot expense"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">{{ s['name'] }}</div>
+                <div class="entry-notes">
+                    {% if s['entries'] and s['entries'] > 0 %}
+                    {{ s['entries'] }} recovery {{ 'entries' if s['entries'] != 1 else 'entry' }}
+                    &middot; Total {{ s['total_recovered']|pkr }}
+                    {% if s['last_date'] %}&middot; Last: {{ s['last_date'] }}{% endif %}
+                    {% else %}
+                    No recovery entries yet
+                    {% endif %}
+                </div>
+            </div>
+            <div class="entry-amount mono">
+                <span class="status-badge status-inactive">Inactive</span>
+            </div>
+            <div class="entry-actions">
+                <button type="button" class="btn btn-sm btn-edit"
+                        onclick="openRenameModal({{ s['id'] }}, '{{ s['name']|e }}')">&#9998; Rename</button>
+                <form method="POST" action="{{ url_for('salesmen_toggle', salesman_id=s['id']) }}"
+                      class="salesman-toggle-form" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-recovery">Activate</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-msg empty-compact">
+        <span class="empty-icon">&#128237;</span>
+        <div class="empty-text">No inactive salesmen</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ADD SALESMAN MODAL -->
+<div id="addSalesmanModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--green);">&#9679;</span> Add Salesman</div>
+            <button type="button" onclick="closeAddSalesmanModal()" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('salesmen_add') }}">
+            <div class="form-group">
+                <label for="add_salesman_name">Salesman Name</label>
+                <input type="text" id="add_salesman_name" name="name" required
+                       placeholder="e.g. Khalid" autocomplete="off" maxlength="80" autofocus>
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeAddSalesmanModal()" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- RENAME SALESMAN MODAL -->
+<div id="renameSalesmanModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--brand);">&#9679;</span> Rename Salesman</div>
+            <button type="button" onclick="closeRenameModal()" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <form id="renameSalesmanForm" method="POST" action="">
+            <div class="form-group">
+                <label for="rename_salesman_name">New Name</label>
+                <input type="text" id="rename_salesman_name" name="name" required
+                       placeholder="Updated name" autocomplete="off" maxlength="80">
+                <div class="entry-notes" id="renameCurrentLabel" style="margin-top:6px;"></div>
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeRenameModal()" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddSalesmanModal() {
+    var m = document.getElementById('addSalesmanModal');
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() {
+        var i = document.getElementById('add_salesman_name');
+        if (i) { i.value = ''; i.focus(); }
+    }, 30);
+}
+
+function closeAddSalesmanModal() {
+    document.getElementById('addSalesmanModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function openRenameModal(id, currentName) {
+    var m = document.getElementById('renameSalesmanModal');
+    var form = document.getElementById('renameSalesmanForm');
+    var input = document.getElementById('rename_salesman_name');
+    var label = document.getElementById('renameCurrentLabel');
+    form.action = '/salesmen/' + id + '/rename';
+    input.value = currentName;
+    label.textContent = 'Current: ' + currentName;
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { input.focus(); input.select(); }, 30);
+}
+
+function closeRenameModal() {
+    document.getElementById('renameSalesmanModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            if (overlay.id === 'addSalesmanModal') closeAddSalesmanModal();
+            else if (overlay.id === 'renameSalesmanModal') closeRenameModal();
+        }
+    });
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var a = document.getElementById('addSalesmanModal');
+    var r = document.getElementById('renameSalesmanModal');
+    if (a && a.style.display === 'flex') closeAddSalesmanModal();
+    if (r && r.style.display === 'flex') closeRenameModal();
+});
+
+// Fade the row out when the user clicks Activate / Deactivate.
+// Natural form POST still proceeds — this just adds a brief visual cue
+// before the page reloads with the row in its new section.
+document.querySelectorAll('form.salesman-toggle-form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+        var row = form.closest('.salesman-row');
+        if (row) row.classList.add('row-fading');
+    });
+});
+</script>
+{% endblock %}

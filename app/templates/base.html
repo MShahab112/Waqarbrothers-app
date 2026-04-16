@@ -16,7 +16,7 @@
     />
     <link
       rel="stylesheet"
-      href="{{ url_for('static', filename='style.css') }}"
+      href="{{ url_for('static', filename='style.css') }}?v=2"
     />
     <style>
       /* Smooth page transition — prevent FOUC */
@@ -26,6 +26,35 @@
       }
       body.loaded {
         opacity: 1;
+      }
+      /* Perceived-speed state while a navigation is in-flight.
+         Declared after .loaded so it wins the same-specificity fight. */
+      body.page-loading {
+        opacity: 0.85;
+        transition: opacity 0.15s ease;
+      }
+      body.page-loading::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 2px;
+        width: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          var(--brand, #3b82f6) 50%,
+          transparent 100%
+        );
+        background-size: 200% 100%;
+        background-repeat: no-repeat;
+        animation: page-loading-bar 0.9s linear infinite;
+        z-index: 9999;
+        pointer-events: none;
+      }
+      @keyframes page-loading-bar {
+        0%   { background-position: -100% 0; }
+        100% { background-position:  200% 0; }
       }
     </style>
     <script>
@@ -64,6 +93,11 @@
           >Reports</a
         >
         <a
+          href="{{ url_for('salesmen_page') }}"
+          class="{% if request.endpoint in ['salesmen_page'] %}active{% endif %}"
+          >Salesmen</a
+        >
+        <a
           href="{{ url_for('settings') }}"
           class="{% if request.endpoint == 'settings' %}active{% endif %}"
           >Settings</a
@@ -82,7 +116,9 @@
     messages %}
     <div class="flash-container">
       {% for category, message in messages %}
+      {% if message and message.strip() %}
       <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endif %}
       {% endfor %}
     </div>
     {% endif %} {% endwith %}
@@ -95,6 +131,28 @@
       requestAnimationFrame(function () {
         document.body.classList.add("loaded");
       });
+
+      // Perceived-speed page-loading indicator. Adds body.page-loading on
+      // real navigation clicks; skips new-tab / modifier / hash / download /
+      // opt-out cases. Cleared automatically when the next page renders.
+      (function () {
+        document.addEventListener("click", function (e) {
+          var a = e.target.closest && e.target.closest("a");
+          if (!a) return;
+          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          if (a.target === "_blank") return;
+          if (a.hasAttribute("download")) return;
+          if (a.hasAttribute("data-no-loading")) return;
+          var href = a.getAttribute("href");
+          if (!href || href.charAt(0) === "#" || href.indexOf("javascript:") === 0) return;
+          document.body.classList.add("page-loading");
+        });
+
+        // bfcache restore (back/forward) reuses the DOM — strip the class.
+        window.addEventListener("pageshow", function () {
+          document.body.classList.remove("page-loading");
+        });
+      })();
 
       // Auto-reload after a successful restore
       (function () {
@@ -152,20 +210,21 @@
         });
       })();
 
-      // Auto-dismiss flash messages after 5 seconds
+      // Auto-dismiss flash messages after 3 seconds
       (function () {
         var flashes = document.querySelectorAll(".flash");
         flashes.forEach(function (el) {
           // Don't auto-dismiss restore messages (page will reload itself)
           if (el.classList.contains("flash-restore_success")) return;
           setTimeout(function () {
-            el.style.transition = "opacity 0.4s ease, transform 0.4s ease";
-            el.style.opacity = "0";
-            el.style.transform = "translateY(-8px)";
+            if (!el) return;
+            el.classList.add('fade-out');
             setTimeout(function () {
-              el.remove();
-            }, 400);
-          }, 5000);
+              if (el && el.parentNode) {
+                el.remove();
+              }
+            }, 300);
+          }, 3000);
         });
       })();
     </script>

@@ -87,6 +87,7 @@
             <option value="all" {% if filter_payment == 'all' %}selected{% endif %}>All Types</option>
             <option value="cash" {% if filter_payment == 'cash' %}selected{% endif %}>Cash</option>
             <option value="online" {% if filter_payment == 'online' %}selected{% endif %}>Online</option>
+            <option value="bank_slip" {% if filter_payment == 'bank_slip' %}selected{% endif %}>Bank Slip</option>
         </select>
         <select name="category" class="filter-select">
             <option value="all" {% if category_filter == 'all' %}selected{% endif %}>All Categories</option>
@@ -213,23 +214,37 @@
         <span>Total Expenses</span>
         <span class="amount mono expense">{{ total_expenses|pkr }}</span>
     </div>
+    {% if total_bank_transfer and total_bank_transfer > 0 %}
+    <div class="section-total" style="opacity: 0.85;">
+        <span>Bank Transfers (not an expense)</span>
+        <span class="amount mono">{{ total_bank_transfer|pkr }}</span>
+    </div>
+    {% endif %}
 </div>
 
 <!-- DAILY SUMMARY — Dashboard Cards -->
 <div class="summary-cards" id="summaryCards">
     <div class="summary-stat-card green">
-        <div class="stat-label">Total Recovery</div>
+        <div class="stat-label">Total Recovery <span class="stat-trend up">&#9650;</span></div>
         <div class="stat-value mono">{{ total_recovery|pkr }}</div>
     </div>
     <div class="summary-stat-card red">
-        <div class="stat-label">Total Expenses</div>
+        <div class="stat-label">Total Expenses <span class="stat-trend down">&#9660;</span></div>
         <div class="stat-value mono">{{ total_expenses|pkr }}</div>
     </div>
     <div class="summary-stat-card highlight">
         <div class="stat-label">Closing Balance</div>
-        <div class="stat-value mono {% if closing_balance < 0 %}negative-balance{% endif %}">{{ closing_balance|pkr }}</div>
+        <div class="stat-value mono {% if closing_balance < 0 %}negative-balance{% endif %}" data-value="{{ closing_balance }}" id="currentClosingBalance">{{ closing_balance|pkr }}</div>
     </div>
 </div>
+
+{% if total_bank_transfer and total_bank_transfer > 0 %}
+<div class="bank-transfer-strip">
+    <span class="bt-icon">&#127974;</span>
+    <span class="bt-label">Bank Transfers (excluded from expenses)</span>
+    <span class="bt-amount mono">{{ total_bank_transfer|pkr }}</span>
+</div>
+{% endif %}
 
 <!-- DAILY SUMMARY — Detailed Breakdown -->
 <div class="card">
@@ -246,6 +261,12 @@
         <span class="summary-label"><span class="operator">&minus;</span> Total Expenses</span>
         <span class="summary-amount mono expense">{{ total_expenses|pkr }}</span>
     </div>
+    {% if total_bank_transfer and total_bank_transfer > 0 %}
+    <div class="summary-row">
+        <span class="summary-label"><span class="operator">&minus;</span> Bank Transfers</span>
+        <span class="summary-amount mono">{{ total_bank_transfer|pkr }}</span>
+    </div>
+    {% endif %}
     <div class="summary-row closing">
         <span class="summary-label"><strong>= Closing Balance</strong></span>
         <span class="summary-amount mono closing-hero {% if closing_balance < 0 %}negative{% endif %}">{{ closing_balance|pkr }}</span>
@@ -283,32 +304,41 @@
             <div class="modal-title"><span style="color: var(--green);">&#9679;</span> Add Recovery Entry</div>
             <button type="button" onclick="closeModal('recoveryModal')" class="modal-close" tabindex="-1">&times;</button>
         </div>
-        <form method="POST" action="{{ url_for('add_entry') }}" data-toast="Recovery added successfully">
+        <form method="POST" action="{{ url_for('add_entry') }}" data-toast="Recovery added successfully" data-validate="1">
             <input type="hidden" name="type" value="recovery">
-            <div class="form-group">
-                <label for="recovery_date">Date</label>
-                <input type="date" id="recovery_date" name="date" value="{{ page_date }}" required tabindex="1">
-            </div>
+            <input type="hidden" name="confirm_duplicate" value="0">
+            <input type="hidden" name="salesman_id" id="recovery_salesman_id" value="">
             <div class="form-group suggestions-wrap">
-                <label for="recovery_description">Salesman Name</label>
+                <label for="recovery_description">Salesman</label>
                 <input type="text" id="recovery_description" name="description" required
-                       placeholder="e.g. Khalid" autocomplete="off" tabindex="2"
-                       data-suggest="recovery">
+                       placeholder="Type to search salesmen..." autocomplete="off" tabindex="1"
+                       data-salesman-autocomplete="1">
                 <div class="suggestions-list" id="recoverySuggestions" style="display:none;"></div>
+                <div class="entry-notes" id="recoverySalesmanHint" style="margin-top:6px;">
+                    Choose an existing salesman or type a new name and click <strong>Add new</strong>.
+                </div>
+                <div class="error-text" id="recoverySalesmanError" style="display:none;">
+                    Please select an existing salesman or click '+ Add new'.
+                </div>
             </div>
             <div class="form-group">
                 <label for="recovery_amount">Amount (PKR)</label>
                 <input type="number" id="recovery_amount" name="amount" required
-                       min="1" step="1" placeholder="e.g. 150000" class="amount-input" tabindex="3">
+                       min="1" step="1" placeholder="e.g. 150000" class="amount-input" tabindex="2">
             </div>
             <div class="form-group">
                 <label for="recovery_notes">Notes (optional)</label>
                 <input type="text" id="recovery_notes" name="notes"
-                       placeholder="Any extra details" tabindex="4">
+                       placeholder="Any extra details" tabindex="3">
+            </div>
+            <div class="form-group">
+                <label for="recovery_date">Date</label>
+                <input type="date" id="recovery_date" name="date" value="{{ page_date }}" required tabindex="6">
             </div>
             <div class="form-actions">
-                <button type="button" onclick="closeModal('recoveryModal')" class="btn btn-ghost" tabindex="6">Cancel</button>
-                <button type="submit" class="btn btn-primary" tabindex="5">Save Entry</button>
+                <button type="submit" class="btn btn-primary" data-no-stay="1" tabindex="4" style="order:3;">Save Entry</button>
+                <button type="submit" class="btn btn-ghost" data-stay-open="recoveryModal" tabindex="5" style="order:2;">Save &amp; Add Another</button>
+                <button type="button" onclick="closeModal('recoveryModal')" class="btn btn-ghost" tabindex="7" style="order:1;">Cancel</button>
             </div>
         </form>
     </div>
@@ -321,56 +351,77 @@
             <div class="modal-title"><span style="color: var(--red);">&#9679;</span> Add Expense Entry</div>
             <button type="button" onclick="closeModal('expenseModal')" class="modal-close" tabindex="-1">&times;</button>
         </div>
-        <form method="POST" action="{{ url_for('add_entry') }}" enctype="multipart/form-data" data-toast="Expense saved successfully">
+        <form method="POST" action="{{ url_for('add_entry') }}" enctype="multipart/form-data" data-toast="Expense saved successfully" data-validate="1">
             <input type="hidden" name="type" value="expense">
-            <div class="form-group">
-                <label for="expense_date">Date</label>
-                <input type="date" id="expense_date" name="date" value="{{ page_date }}" required tabindex="1">
-            </div>
+            <input type="hidden" name="confirm_duplicate" value="0">
             <div class="form-group suggestions-wrap">
                 <label for="expense_description">Description</label>
                 <input type="text" id="expense_description" name="description" required
-                       placeholder="e.g. Food / Tea" autocomplete="off" tabindex="2"
+                       placeholder="e.g. Food / Tea" autocomplete="off" tabindex="1"
                        data-suggest="expense">
                 <div class="suggestions-list" id="expenseSuggestions" style="display:none;"></div>
             </div>
             <div class="form-group">
                 <label for="expense_payment_type">Payment Type</label>
-                <select name="payment_type" id="expense_payment_type" onchange="toggleReceiptField()" tabindex="3">
+                <select name="payment_type" id="expense_payment_type" onchange="toggleReceiptField()" tabindex="2">
                     <option value="cash">Cash</option>
                     <option value="online">Online</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="expense_category">Category</label>
-                <select name="category" id="expense_category" tabindex="4">
-                    <option value="food">Food / Tea</option>
-                    <option value="transport">Transport</option>
-                    <option value="bank">Bank Slip</option>
-                    <option value="utility">Utility Bill</option>
-                    <option value="zakat">Zakat / Charity</option>
-                    <option value="other" selected>Other</option>
+                    <option value="bank_slip">Bank Slip</option>
                 </select>
             </div>
             <div class="form-group">
                 <label for="expense_amount" id="expense_amount_label">Amount (PKR)</label>
                 <input type="number" id="expense_amount" name="amount" required
-                       min="1" step="1" placeholder="e.g. 5000" class="amount-input" tabindex="5">
+                       min="1" step="1" placeholder="e.g. 5000" class="amount-input" tabindex="3">
             </div>
             <div class="form-group" id="receipt-field" style="display:none;">
-                <label for="expense_receipt">Upload Transaction Screenshot</label>
-                <input type="file" id="expense_receipt" name="receipt" accept="image/*" tabindex="6">
+                <label for="expense_receipt" id="expense_receipt_label">Upload Transaction Screenshot</label>
+                <input type="file" id="expense_receipt" name="receipt" accept="image/*" tabindex="4">
             </div>
             <div class="form-group">
                 <label for="expense_notes">Notes (optional)</label>
                 <input type="text" id="expense_notes" name="notes"
-                       placeholder="Any extra details" tabindex="7">
+                       placeholder="Any extra details" tabindex="5">
+            </div>
+            <div class="form-group">
+                <label for="expense_date">Date</label>
+                <input type="date" id="expense_date" name="date" value="{{ page_date }}" required tabindex="8">
             </div>
             <div class="form-actions">
-                <button type="button" onclick="closeModal('expenseModal')" class="btn btn-ghost" tabindex="9">Cancel</button>
-                <button type="submit" class="btn btn-primary" tabindex="8">Save Entry</button>
+                <button type="submit" class="btn btn-primary" data-no-stay="1" tabindex="6" style="order:3;">Save Entry</button>
+                <button type="submit" class="btn btn-ghost" data-stay-open="expenseModal" tabindex="7" style="order:2;">Save &amp; Add Another</button>
+                <button type="button" onclick="closeModal('expenseModal')" class="btn btn-ghost" tabindex="9" style="order:1;">Cancel</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- SALESMAN CREATION PIN MODAL -->
+<div id="salesmanPinModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width: 420px;">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--brand);">&#128274;</span> Confirm New Salesman</div>
+            <button type="button" onclick="closeSalesmanPinModal()" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <div style="padding: 4px 0 14px; line-height: 1.5;">
+            Are you sure you want to create new salesman
+            <strong id="salesmanPinName">""</strong>?
+            <div class="entry-notes" style="margin-top: 8px;">
+                Enter the admin PIN to confirm. This is the same PIN used for closing days.
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="salesmanPinInput">Admin PIN</label>
+            <input type="password" id="salesmanPinInput" inputmode="numeric"
+                   maxlength="4" autocomplete="off" placeholder="••••"
+                   style="letter-spacing: 6px; text-align: center; font-size: 18px;">
+            <div id="salesmanPinError" class="flash flash-error"
+                 style="display:none; margin-top: 10px; padding: 8px 12px;"></div>
+        </div>
+        <div class="form-actions">
+            <button type="button" onclick="closeSalesmanPinModal()" class="btn btn-ghost">Cancel</button>
+            <button type="button" id="salesmanPinConfirm" class="btn btn-primary">Create</button>
+        </div>
     </div>
 </div>
 
@@ -476,8 +527,7 @@
 </div>
 {% endif %}
 
-<!-- Toast container -->
-<div class="toast-container" id="toastContainer"></div>
+<!-- Toast container removed -->
 
 <script>
 // ============================================================
@@ -498,17 +548,26 @@
 })();
 
 // ============================================================
-// TOAST SYSTEM
+// TOAST SYSTEM (Now mapped to native Flash UI)
 // ============================================================
 function showToast(message, type) {
+    if (!message || !message.trim()) return;
     setTimeout(function() {
-        var c = document.getElementById('toastContainer');
+        var c = document.querySelector('.flash-container');
+        if (!c) {
+            c = document.createElement('div');
+            c.className = 'flash-container';
+            document.body.insertBefore(c, document.body.firstChild);
+        }
         var t = document.createElement('div');
-        t.className = 'toast toast-' + (type || 'success');
-        t.innerHTML = '<span class="toast-icon">' + (type === 'error' ? '&#10060;' : '&#10003;') + '</span>' + message;
+        t.className = 'flash flash-' + (type || 'success');
+        t.innerHTML = message;
         c.appendChild(t);
         playTickSound();
-        setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 3200);
+        setTimeout(function() {
+            t.classList.add('fade-out');
+            setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+        }, 3000);
     }, 120);
 }
 
@@ -528,18 +587,6 @@ function playTickSound() {
         osc.stop(ctx.currentTime + 0.12);
     } catch(e) {}
 }
-
-// Convert flash messages to toasts
-(function() {
-    document.querySelectorAll('.flash-success').forEach(function(f) {
-        showToast(f.textContent.trim(), 'success');
-        f.style.display = 'none';
-    });
-    document.querySelectorAll('.flash-error').forEach(function(f) {
-        showToast(f.textContent.trim(), 'error');
-        f.style.display = 'none';
-    });
-})();
 
 // ============================================================
 // LAST SAVED INDICATOR
@@ -649,15 +696,275 @@ document.querySelectorAll('[data-suggest]').forEach(function(input) {
             e.preventDefault();
             activeIdx = Math.max(activeIdx - 1, 0);
             items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
-        } else if (e.key === 'Enter' && activeIdx >= 0) {
+        } else if (e.key === 'Enter') {
+            // Autocomplete Enter: always pick (active row, or first row if none).
+            // Prevents form submission while suggestions are open.
             e.preventDefault();
-            input.value = items[activeIdx].textContent;
+            var pickIdx = activeIdx >= 0 ? activeIdx : 0;
+            input.value = items[pickIdx].textContent;
             listEl.style.display = 'none';
             var amountField = input.closest('form').querySelector('.amount-input');
             if (amountField) amountField.focus();
         }
     });
 });
+
+// ============================================================
+// SALESMAN AUTOCOMPLETE (server-backed, /api/salesmen)
+// ============================================================
+(function() {
+    var input = document.querySelector('input[data-salesman-autocomplete="1"]');
+    if (!input) return;
+    var listEl = document.getElementById('recoverySuggestions');
+    var hiddenId = document.getElementById('recovery_salesman_id');
+    if (!listEl || !hiddenId) return;
+
+    var activeIdx = -1;
+    var lastResults = [];
+    var debounceTimer = null;
+    var lastSelectedName = '';
+
+    function hideList() { listEl.style.display = 'none'; activeIdx = -1; }
+
+    function clearSalesmanError() {
+        input.classList.remove('input-error');
+        var err = document.getElementById('recoverySalesmanError');
+        if (err) err.style.display = 'none';
+    }
+
+    function pickSalesman(id, name) {
+        input.value = name;
+        hiddenId.value = String(id);
+        lastSelectedName = name;
+        hideList();
+        clearSalesmanError();
+        var amountField = input.closest('form').querySelector('.amount-input');
+        if (amountField) amountField.focus();
+    }
+
+    function createNew(rawName) {
+        var name = (rawName || input.value || '').trim();
+        if (!name) return;
+        // Route through the PIN confirmation modal. On success the modal
+        // calls pickSalesman with the returned id/name.
+        window.__salesmanPendingName = name;
+        window.__salesmanPickCallback = function(id, newName) {
+            pickSalesman(id, newName);
+        };
+        openSalesmanPinModal(name);
+    }
+
+    function render(results, query) {
+        lastResults = results || [];
+        listEl.innerHTML = '';
+        var hasExact = false;
+        var q = (query || '').trim();
+        var qLower = q.toLowerCase();
+
+        lastResults.forEach(function(s, i) {
+            var div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = s.name;
+            div.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                pickSalesman(s.id, s.name);
+            });
+            listEl.appendChild(div);
+            if (s.name.toLowerCase() === qLower) hasExact = true;
+        });
+
+        if (q && !hasExact) {
+            var add = document.createElement('div');
+            add.className = 'suggestion-item suggestion-add-new';
+            add.innerHTML = '<strong>+ Add new</strong> &ldquo;' + q.replace(/</g, '&lt;') + '&rdquo;';
+            add.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                createNew(q);
+            });
+            listEl.appendChild(add);
+        }
+
+        if (!listEl.children.length) { hideList(); return; }
+        listEl.style.display = 'block';
+        activeIdx = -1;
+    }
+
+    function fetchSuggestions(q) {
+        var url = '{{ url_for("api_salesmen") }}?q=' + encodeURIComponent(q || '');
+        fetch(url).then(function(r) { return r.ok ? r.json() : []; })
+                  .then(function(data) { render(data || [], q); })
+                  .catch(function() { render([], q); });
+    }
+
+    function schedule() {
+        clearTimeout(debounceTimer);
+        var q = input.value;
+        debounceTimer = setTimeout(function() { fetchSuggestions(q); }, 120);
+    }
+
+    input.addEventListener('focus', function() {
+        fetchSuggestions(input.value);
+    });
+    input.addEventListener('input', function() {
+        // Typing invalidates any prior selection unless the name still matches
+        if (input.value.trim() !== lastSelectedName) {
+            hiddenId.value = '';
+        }
+        // Hide any stale validation error as soon as the user starts fixing it
+        clearSalesmanError();
+        schedule();
+    });
+    input.addEventListener('blur', function() {
+        setTimeout(hideList, 150);
+    });
+    input.addEventListener('keydown', function(e) {
+        var items = listEl.querySelectorAll('.suggestion-item');
+        if (!items.length || listEl.style.display === 'none') return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, items.length - 1);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'Enter') {
+            // Autocomplete Enter: pick (active row, or first row if none).
+            // Prevents form submission while suggestions are open.
+            e.preventDefault();
+            var pickIdx = activeIdx >= 0 ? activeIdx : 0;
+            var el = items[pickIdx];
+            if (el.classList.contains('suggestion-add-new')) {
+                createNew(input.value);
+            } else {
+                var picked = lastResults[pickIdx];
+                if (picked) pickSalesman(picked.id, picked.name);
+            }
+        }
+    });
+})();
+
+// ============================================================
+// SALESMAN CREATION — PIN CONFIRMATION MODAL
+// ============================================================
+function openSalesmanPinModal(name) {
+    var m = document.getElementById('salesmanPinModal');
+    if (!m) return;
+    document.getElementById('salesmanPinName').textContent = '"' + name + '"';
+    var pinInput = document.getElementById('salesmanPinInput');
+    var err = document.getElementById('salesmanPinError');
+    if (pinInput) { pinInput.value = ''; pinInput.type = 'password'; }
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(function() { if (pinInput) pinInput.focus(); }, 30);
+}
+
+function closeSalesmanPinModal() {
+    var m = document.getElementById('salesmanPinModal');
+    if (!m) return;
+    m.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    window.__salesmanPendingName = null;
+}
+
+function showSalesmanPinError(msg) {
+    var err = document.getElementById('salesmanPinError');
+    if (!err) return;
+    err.textContent = msg;
+    err.style.display = 'block';
+}
+
+function submitSalesmanPin() {
+    var pinInput = document.getElementById('salesmanPinInput');
+    var btn = document.getElementById('salesmanPinConfirm');
+    if (!pinInput || !btn) return;
+
+    var pin = (pinInput.value || '').trim();
+    if (!/^\d{4}$/.test(pin)) {
+        showSalesmanPinError('PIN must be exactly 4 digits.');
+        pinInput.focus();
+        pinInput.select();
+        return;
+    }
+    var name = window.__salesmanPendingName;
+    if (!name) {
+        closeSalesmanPinModal();
+        return;
+    }
+
+    btn.disabled = true;
+    var originalText = btn.textContent;
+    btn.textContent = 'Creating…';
+
+    var body = new URLSearchParams();
+    body.append('name', name);
+    body.append('pin', pin);
+
+    fetch('{{ url_for("api_salesmen_create") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    })
+    .then(function(r) {
+        return r.json().then(function(data) { return { status: r.status, data: data }; });
+    })
+    .then(function(res) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        if (res.status === 401) {
+            showSalesmanPinError((res.data && res.data.error) || 'Incorrect PIN.');
+            pinInput.focus();
+            pinInput.select();
+            return;
+        }
+        if (res.status !== 200 || !res.data || !res.data.id) {
+            showSalesmanPinError((res.data && res.data.error) || 'Could not create salesman.');
+            return;
+        }
+        var cb = window.__salesmanPickCallback;
+        closeSalesmanPinModal();
+        if (typeof cb === 'function') cb(res.data.id, res.data.name);
+        if (typeof showToast === 'function') {
+            showToast(res.data.created
+                ? ('Salesman "' + res.data.name + '" added')
+                : ('Using existing "' + res.data.name + '"'),
+                'success');
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        showSalesmanPinError('Network error — please try again.');
+    });
+}
+
+(function() {
+    var m = document.getElementById('salesmanPinModal');
+    if (!m) return;
+    // Overlay click closes
+    m.addEventListener('click', function(e) {
+        if (e.target === this) closeSalesmanPinModal();
+    });
+    // Button click + Enter-to-submit
+    var btn = document.getElementById('salesmanPinConfirm');
+    if (btn) btn.addEventListener('click', submitSalesmanPin);
+    var pinInput = document.getElementById('salesmanPinInput');
+    if (pinInput) {
+        pinInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); submitSalesmanPin(); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeSalesmanPinModal(); }
+        });
+        // Strip non-digits
+        pinInput.addEventListener('input', function() {
+            var cleaned = pinInput.value.replace(/\D/g, '').slice(0, 4);
+            if (cleaned !== pinInput.value) pinInput.value = cleaned;
+            var err = document.getElementById('salesmanPinError');
+            if (err) err.style.display = 'none';
+        });
+    }
+})();
 
 // ============================================================
 // DELETE CONFIRMATION MODAL
@@ -862,14 +1169,29 @@ function openModal(id) {
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 
-    // Prefill description from last used value
+    // Clear any stale inline error from a previous attempt
+    if (id === 'recoveryModal') {
+        var recInput = document.getElementById('recovery_description');
+        if (recInput) recInput.classList.remove('input-error');
+        var recErr = document.getElementById('recoverySalesmanError');
+        if (recErr) recErr.style.display = 'none';
+    }
+
+    // Amount always starts empty on open / reopen — Fast Entry flow
+    var amtField = modal.querySelector('.amount-input');
+    if (amtField) amtField.value = '';
+
+    // Prefill description from last used value — expense only.
+    // Recovery must explicitly pick a salesman (hidden id drives the form),
+    // so we never prefill the salesman search box from localStorage.
     var focusId = modalFocus[id];
     if (focusId) {
         var descInput = document.getElementById(focusId);
-        var type = id === 'recoveryModal' ? 'recovery' : 'expense';
-        var lastUsed = localStorage.getItem('wb_last_' + type);
-        if (lastUsed && !descInput.value) {
-            descInput.value = lastUsed;
+        if (id === 'expenseModal') {
+            var lastUsed = localStorage.getItem('wb_last_expense');
+            if (lastUsed && !descInput.value) {
+                descInput.value = lastUsed;
+            }
         }
         setTimeout(function() {
             // Focus the amount field if description is prefilled, otherwise description
@@ -897,7 +1219,57 @@ function closeModal(id) {
     }
     // Hide suggestions
     modal.querySelectorAll('.suggestions-list').forEach(function(s) { s.style.display = 'none'; });
+    // Cancelling the modal also cancels any pending stay-open intent
+    sessionStorage.removeItem('wb_reopen_modal');
 }
+
+// ============================================================
+// FAST ENTRY — "Save & Add Another" / reopen-on-reload
+// ============================================================
+document.querySelectorAll('button[data-stay-open]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        sessionStorage.setItem('wb_reopen_modal', btn.getAttribute('data-stay-open'));
+    });
+});
+document.querySelectorAll('button[data-no-stay]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        sessionStorage.removeItem('wb_reopen_modal');
+    });
+});
+(function reopenIfRequested() {
+    var mid = sessionStorage.getItem('wb_reopen_modal');
+    if (!mid) return;
+    sessionStorage.removeItem('wb_reopen_modal');
+    if (document.getElementById(mid)) openModal(mid);
+})();
+
+// Amount field: Enter moves to Notes (not submit). Focus selects existing text.
+[['recovery_amount', 'recovery_notes'],
+ ['expense_amount',  'expense_notes']].forEach(function(pair) {
+    var amt = document.getElementById(pair[0]);
+    var notes = document.getElementById(pair[1]);
+    if (!amt) return;
+    amt.addEventListener('focus', function() { amt.select(); });
+    amt.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (notes) notes.focus();
+        }
+    });
+});
+
+// Ctrl+Enter anywhere inside an entry modal → trigger "Save & Add Another"
+['recoveryModal', 'expenseModal'].forEach(function(mid) {
+    var modal = document.getElementById(mid);
+    if (!modal) return;
+    modal.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            var stayBtn = modal.querySelector('button[data-stay-open]');
+            if (stayBtn) stayBtn.click();
+        }
+    });
+});
 
 // Close modals on overlay click
 document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
@@ -947,12 +1319,19 @@ function toggleReceiptField() {
     var pt = document.getElementById('expense_payment_type').value;
     var rf = document.getElementById('receipt-field');
     var al = document.getElementById('expense_amount_label');
+    var rl = document.getElementById('expense_receipt_label');
     if (pt === 'online') {
         rf.style.display = 'block';
         al.textContent = 'Transaction Amount (confirm from slip)';
+        if (rl) rl.textContent = 'Upload Online Payment Screenshot';
+    } else if (pt === 'bank_slip') {
+        rf.style.display = 'block';
+        al.textContent = 'Slip Amount (confirm from slip)';
+        if (rl) rl.textContent = 'Upload Bank Slip Image';
     } else {
         rf.style.display = 'none';
         al.textContent = 'Amount (PKR)';
+        if (rl) rl.textContent = 'Upload Transaction Screenshot';
     }
 }
 
@@ -965,6 +1344,91 @@ if (datePicker) {
         if (this.value) window.location.href = '{{ url_for("daily") }}?date=' + this.value;
     });
 }
+
+// ============================================================
+// ENTRY FORM VALIDATION — Duplicate check + Negative balance warning
+// ============================================================
+(function() {
+    // Current closing balance (cash on hand) for this page view
+    var balEl = document.getElementById('currentClosingBalance');
+    var currentBalance = balEl ? parseInt(balEl.getAttribute('data-value') || '0', 10) : 0;
+
+    document.querySelectorAll('form[data-validate="1"]').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            // Skip re-validation if already confirmed
+            if (form.getAttribute('data-confirmed') === '1') return;
+
+            var typeInput = form.querySelector('input[name="type"]');
+            var dateInput = form.querySelector('input[name="date"]');
+            var descInput = form.querySelector('input[name="description"]');
+            var amtInput  = form.querySelector('input[name="amount"]');
+            if (!typeInput || !dateInput || !descInput || !amtInput) return;
+
+            var entryType = typeInput.value;
+            var amount = parseInt(amtInput.value || '0', 10);
+            if (!amount || amount <= 0) return;
+
+            // --- Recovery must have a selected salesman_id ---
+            if (entryType === 'recovery') {
+                var sidEl = form.querySelector('input[name="salesman_id"]');
+                var sidVal = sidEl ? parseInt(sidEl.value || '0', 10) : 0;
+                if (!sidVal) {
+                    e.preventDefault();
+                    if (descInput) {
+                        descInput.classList.add('input-error');
+                        descInput.focus();
+                        descInput.select();
+                    }
+                    var errEl = document.getElementById('recoverySalesmanError');
+                    if (errEl) errEl.style.display = 'flex';
+                    return;
+                }
+            }
+
+            // --- Negative balance warning (expense only) ---
+            if (entryType === 'expense') {
+                var projected = currentBalance - amount;
+                if (projected < 0) {
+                    var ok = window.confirm(
+                        'Warning: this will take the closing balance to PKR '
+                        + projected.toLocaleString('en-IN')
+                        + '.\n\nSave this expense anyway?'
+                    );
+                    if (!ok) {
+                        e.preventDefault();
+                        return;
+                    }
+                }
+            }
+
+            // --- Duplicate check (async) ---
+            e.preventDefault();
+            var qs = new URLSearchParams();
+            qs.append('type', entryType);
+            qs.append('date', dateInput.value);
+            qs.append('description', descInput.value);
+            qs.append('amount', String(amount));
+
+            fetch('{{ url_for("api_check_duplicate") }}?' + qs.toString(), {
+                method: 'GET'
+            }).then(function(r) { return r.ok ? r.json() : { duplicate: false }; })
+              .catch(function() { return { duplicate: false }; })
+              .then(function(data) {
+                if (data && data.duplicate) {
+                    var ok = window.confirm(
+                        'A similar entry already exists for this date, amount, and description.\n\n'
+                        + 'Save it anyway?'
+                    );
+                    if (!ok) return;
+                    var cd = form.querySelector('input[name="confirm_duplicate"]');
+                    if (cd) cd.value = '1';
+                }
+                form.setAttribute('data-confirmed', '1');
+                form.submit();
+              });
+        });
+    });
+})();
 
 // ============================================================
 // SAVE BUTTON — Spinner + Remember + Toast + Last Saved
@@ -986,12 +1450,6 @@ document.querySelectorAll('.modal-card form').forEach(function(form) {
             localStorage.setItem('wb_last_' + type, descInput.value.trim());
             SuggestEngine.save(type, descInput.value.trim());
         }
-
-        // Queue toast + last-saved time
-        var toastMsg = form.getAttribute('data-toast');
-        if (toastMsg) {
-            sessionStorage.setItem('pendingToast', toastMsg);
-        }
         var now = new Date();
         var h = now.getHours(), m = now.getMinutes();
         var ap = h >= 12 ? 'PM' : 'AM';
@@ -1000,14 +1458,7 @@ document.querySelectorAll('.modal-card form').forEach(function(form) {
     });
 });
 
-// Show queued toast from previous save (with slight delay for perceived speed)
-(function() {
-    var pending = sessionStorage.getItem('pendingToast');
-    if (pending) {
-        sessionStorage.removeItem('pendingToast');
-        setTimeout(function() { showToast(pending, 'success'); }, 250);
-    }
-})();
+// Note: Queued toast functionality removed.
 
 // ============================================================
 // STICKY SUMMARY BAR

@@ -62,8 +62,13 @@ All data is stored locally on your system.
 
 ## 📦 Version
 
-**v1.3 – Stable Release**
+**v1.6 – UI Polish & Graph Improvements**
+* Fixed duplicate notifications (toast cleanup)
+* Improved dashboard graph visibility and tooltips
+* Removed confusing "Drawing" automatic category mapping
+* Added smooth fade animations and timeout cleanup
 
+**v1.5 – UI Upgrade**
 ---
 
 ## 👨‍💻 Developer
