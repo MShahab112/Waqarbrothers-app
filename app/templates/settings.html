@@ -72,17 +72,14 @@ endblock %} {% block content %}
     <p class="hint" style="margin-bottom: 12px">
       When a folder is set here, every manual backup and every Day Close will
       <strong>also</strong> be copied there in addition to the normal local
-      download. Install
-      <a
-        href="https://www.google.com/drive/download/"
-        target="_blank"
-        rel="noopener"
-        >Google Drive for Desktop</a
-      >
-      (or OneDrive) first, then paste the synced folder path below — e.g.
-      <code>G:\My Drive\WaqarBrothers-Backups</code>. The app never talks to
-      Google or Microsoft; it just writes files there and the sync client
-      uploads them.
+      download. The app never talks to Google or Microsoft — it just writes
+      files to the folder, and your sync client (OneDrive / Google Drive for
+      Desktop) uploads them in the background.
+    </p>
+    <p class="hint" style="margin-bottom: 12px">
+      <strong>Just installed on a new machine?</strong> Click
+      <em>Auto-detect</em> below — if OneDrive or Google Drive is already
+      signed in, the app will find the sync folder and configure itself.
     </p>
     <form
       method="POST"
@@ -102,7 +99,16 @@ endblock %} {% block content %}
           Leave empty to disable cloud backup. Local downloads always work.
         </p>
       </div>
-      <div class="form-actions" style="gap: 8px">
+      <div class="form-actions" style="gap: 8px; flex-wrap: wrap">
+        <button
+          type="submit"
+          name="action"
+          value="autodetect"
+          class="btn btn-primary"
+          title="Find OneDrive or Google Drive on this computer and set the folder automatically"
+        >
+          🔍 Auto-detect
+        </button>
         <button
           type="submit"
           name="action"
@@ -115,7 +121,7 @@ endblock %} {% block content %}
           type="submit"
           name="action"
           value="save"
-          class="btn btn-primary"
+          class="btn btn-cancel"
         >
           Save Folder
         </button>

@@ -212,7 +212,7 @@ def save_receipt_file(file_storage):
 ASSETS_FOLDER = assets_path()
 
 # Current app version. Bump this on every release.
-CURRENT_VERSION = "1.8"
+CURRENT_VERSION = "1.9"
 
 
 def _version_tuple(v):
@@ -2775,6 +2775,25 @@ def settings_cloud_backup():
                   'computer.', 'success')
         return redirect(url_for('settings'))
 
+    if action == 'autodetect':
+        detected = _detect_cloud_folder()
+        if not detected:
+            flash('Could not find OneDrive or Google Drive on this computer. '
+                  'Make sure the sync client is installed and signed in, then '
+                  'try again — or paste the folder path manually.', 'error')
+            return redirect(url_for('settings'))
+        db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                   ('cloud_backup_folder', detected))
+        # Clear any stale "last cloud backup" status so Settings doesn't keep
+        # showing an error from a previous path or machine.
+        db.execute("DELETE FROM settings WHERE key IN "
+                   "('last_cloud_backup_status', 'last_cloud_backup_time', "
+                   " 'last_cloud_backup_path')")
+        db.commit()
+        flash(f'Cloud backup folder auto-detected and saved: {detected}',
+              'success')
+        return redirect(url_for('settings'))
+
     if action == 'test':
         if not raw_path:
             flash('Enter a folder path first, then click Test.', 'error')
@@ -4263,6 +4282,120 @@ def _get_cloud_backup_folder(db):
     if the feature isn't set up. Single source of truth — everything else
     routes through here."""
     return (get_setting(db, 'cloud_backup_folder') or '').strip()
+
+
+def _detect_cloud_folder():
+    """Best-effort auto-discovery of a local cloud-synced folder on this
+    machine. Returns the full path to '<root>/WaqarBrothers-Backups' (creating
+    the subfolder if the parent sync root exists), or '' if nothing usable
+    was found.
+
+    We prefer OneDrive (most common on Windows — the env var is set by the
+    OneDrive client as soon as the user signs in), then fall back to Google
+    Drive / Dropbox heuristics. The app never talks to any cloud API — it
+    just finds a folder the sync client is already mirroring."""
+    userprofile = os.environ.get('USERPROFILE', '') or ''
+
+    candidates = []
+    # OneDrive writes these whenever it is signed in.
+    for var in ('OneDrive', 'OneDriveConsumer', 'OneDriveCommercial'):
+        val = os.environ.get(var, '').strip()
+        if val:
+            candidates.append(val)
+    # Fallbacks for when the env var isn't set but the folder still exists.
+    if userprofile:
+        candidates.extend([
+            os.path.join(userprofile, 'OneDrive'),
+            os.path.join(userprofile, 'Google Drive'),
+            os.path.join(userprofile, 'GoogleDrive'),
+            os.path.join(userprofile, 'Dropbox'),
+        ])
+    # Common Google Drive for Desktop mount point.
+    candidates.append(r'G:\My Drive')
+
+    seen = set()
+    for root in candidates:
+        if not root:
+            continue
+        norm = os.path.normcase(os.path.normpath(root))
+        if norm in seen:
+            continue
+        seen.add(norm)
+        if not os.path.isdir(root):
+            continue
+        target = os.path.join(root, 'WaqarBrothers-Backups')
+        try:
+            os.makedirs(target, exist_ok=True)
+            return target
+        except Exception:
+            continue
+    return ''
+
+
+def _auto_configure_cloud_backup(conn):
+    """Idempotent self-healing setup for the cloud backup folder.
+
+    Runs once at startup against a raw sqlite3 connection (since Flask's
+    request-scoped ``get_db()`` isn't available during module init). Handles
+    three scenarios so users on a fresh install never have to copy paths,
+    click Test, and wait for a green message:
+
+      1. First launch on a new machine, no setting exists   → auto-detect
+         OneDrive / Google Drive and save the path.
+      2. DB restored from another machine, saved path points to a folder
+         that doesn't exist here (e.g. ``C:\\Users\\Shahab\\...`` arriving on
+         ``Admin``'s laptop) → auto-heal to this machine's cloud folder and
+         clear the stale error status so Settings no longer shows the old
+         machine's failure.
+      3. User explicitly cleared the field (row exists, value empty) or the
+         current path works → leave everything alone.
+    """
+    try:
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT value FROM settings WHERE key='cloud_backup_folder'"
+        ).fetchone()
+        existing = (row[0] if row else '').strip() if row else ''
+
+        # Case: user opted out (explicit empty). Respect the choice.
+        if row is not None and not existing:
+            return
+        # Case: current path is valid on this machine. Nothing to do.
+        if existing and os.path.isdir(existing):
+            return
+
+        detected = _detect_cloud_folder()
+        if not detected:
+            return
+
+        if existing and os.path.normcase(existing) != os.path.normcase(detected):
+            app.logger.info(
+                'Cloud backup path "%s" not found on this machine; '
+                'auto-healed to "%s".', existing, detected)
+        else:
+            app.logger.info(
+                'Auto-configured cloud backup folder: %s', detected)
+
+        cur.execute(
+            'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+            ('cloud_backup_folder', detected),
+        )
+        # Clear any stale "last cloud backup" status from the old machine so
+        # Settings doesn't keep showing an error that no longer applies.
+        cur.execute(
+            "DELETE FROM settings WHERE key IN "
+            "('last_cloud_backup_status', 'last_cloud_backup_time', "
+            " 'last_cloud_backup_path')"
+        )
+        conn.commit()
+    except Exception:
+        # Auto-config must never take down app startup. Log and move on —
+        # the user can still configure manually from Settings.
+        try:
+            app.logger.warning(
+                'Cloud backup auto-config failed', exc_info=True)
+        except Exception:
+            pass
 
 
 def _set_cloud_backup_status(db, ok, detail, path=None):
@@ -5758,6 +5891,24 @@ def api_descriptions_top():
             'label': f'{desc} ({cat_label})',
         })
     return jsonify(results)
+
+
+# --- Startup hooks that depend on helpers defined above ---
+
+# Auto-configure the cloud backup folder at startup. Runs once per process
+# and handles both "fresh install" and "DB restored from a different Windows
+# username" scenarios so the user never has to paste a path on a new machine.
+# Placed at the bottom of the module because it depends on helpers defined
+# further down in the file (Python executes top-to-bottom).
+try:
+    _auto_init_conn = sqlite3.connect(DATABASE)
+    try:
+        _auto_configure_cloud_backup(_auto_init_conn)
+    finally:
+        _auto_init_conn.close()
+except Exception:
+    app.logger.warning('Could not run cloud backup auto-config at startup',
+                       exc_info=True)
 
 
 # --- Run the App ---
