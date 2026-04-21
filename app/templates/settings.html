@@ -138,6 +138,45 @@ endblock %} {% block content %}
       {% endif %}
     </p>
     {% endif %}
+
+    <hr style="margin: 18px 0; border: none; border-top: 1px dashed var(--border, #333);" />
+
+    <h3 style="margin: 0 0 6px 0;">🖼️ Receipt Images</h3>
+    <p class="hint" style="margin-bottom: 12px">
+      From v1.8 onwards, every new receipt you attach is also copied to
+      <code>&lt;cloud&gt;/uploads/</code> automatically. Use the buttons below
+      for one-time sync of older receipts or to recover images on a new
+      computer after a database restore.
+    </p>
+    <div class="form-actions" style="gap: 8px; flex-wrap: wrap;">
+      <form
+        method="POST"
+        action="{{ url_for('settings_backup_receipts') }}"
+        style="display: inline;"
+        onsubmit="return confirm('Copy every receipt image from this computer to your cloud folder? Safe to click — files already there are skipped.');"
+      >
+        <button type="submit" class="btn btn-cancel">
+          📤 Backup Receipts Now
+        </button>
+      </form>
+      <form
+        method="POST"
+        action="{{ url_for('settings_restore_receipts') }}"
+        style="display: inline;"
+        onsubmit="return confirm('Download every receipt image from your cloud folder to this computer? Safe to click — existing local files are never overwritten.');"
+      >
+        <button type="submit" class="btn btn-primary">
+          📥 Restore Receipts from Cloud
+        </button>
+      </form>
+    </div>
+    <p class="hint" style="margin-top: 8px">
+      <strong>Backup Receipts Now</strong> &rarr; uploads all local images to
+      cloud (run this once on your old computer).<br />
+      <strong>Restore Receipts from Cloud</strong> &rarr; downloads all cloud
+      images to this computer (run this on your new computer after restoring
+      the database).
+    </p>
   </div>
 
   <div class="settings-extra">

@@ -190,7 +190,21 @@ def save_receipt_file(file_storage):
     # Normalize the extension to the sniffed format.
     stored_ext = 'png' if is_png else 'jpg'
     stored_name = f'{uuid.uuid4().hex}.{stored_ext}'
-    file_storage.save(os.path.join(app.config['UPLOAD_FOLDER'], stored_name))
+    local_path = os.path.join(app.config['UPLOAD_FOLDER'], stored_name)
+    file_storage.save(local_path)
+
+    # Best-effort mirror to cloud so receipts survive machine migration.
+    # Silent so per-receipt copies don't spam the Settings status display
+    # (that indicator tracks DB-level events only). Any failure is logged
+    # to logs/cloud_backup.log but NEVER blocks the upload itself — the
+    # local file is already saved and the DB entry will still work.
+    try:
+        copy_to_cloud_backup(get_db(), local_path,
+                             f'uploads/{stored_name}', silent=True)
+    except Exception:
+        app.logger.warning('Receipt cloud mirror failed for %s',
+                           stored_name, exc_info=True)
+
     return stored_name
 
 # Top-level assets folder (logos, icons, brand art). Resolved once at
@@ -198,7 +212,7 @@ def save_receipt_file(file_storage):
 ASSETS_FOLDER = assets_path()
 
 # Current app version. Bump this on every release.
-CURRENT_VERSION = "1.7"
+CURRENT_VERSION = "1.8"
 
 
 def _version_tuple(v):
@@ -2792,6 +2806,131 @@ def settings_cloud_backup():
     return redirect(url_for('settings'))
 
 
+@app.route('/settings/backup-receipts', methods=['POST'])
+@login_required
+def settings_backup_receipts():
+    """One-time bulk sync: copy every file from app/uploads/ into
+    <cloud>/uploads/. Safe to click repeatedly — files already present in the
+    cloud with the same size are skipped. Going forward, new uploads are
+    mirrored automatically via save_receipt_file(), so this button is only
+    needed to catch up receipts that were uploaded before v1.8 (or before
+    the cloud folder was configured).
+    """
+    db = get_db()
+    folder = _get_cloud_backup_folder(db)
+    if not folder:
+        flash('Configure the Cloud Backup Folder first, then try again.',
+              'error')
+        return redirect(url_for('settings'))
+    if not os.path.isdir(folder):
+        flash(f'Cloud folder not found: {folder}. Is OneDrive / Google '
+              f'Drive running?', 'error')
+        return redirect(url_for('settings'))
+
+    upload_dir = app.config['UPLOAD_FOLDER']
+    if not os.path.isdir(upload_dir):
+        flash('No receipts folder on this computer — nothing to back up.',
+              'success')
+        return redirect(url_for('settings'))
+
+    dest_dir = os.path.join(folder, 'uploads')
+    try:
+        os.makedirs(dest_dir, exist_ok=True)
+    except Exception as e:
+        flash(f'Could not create {dest_dir}: {type(e).__name__}: {e}',
+              'error')
+        return redirect(url_for('settings'))
+
+    copied, skipped, failed = 0, 0, 0
+    for name in os.listdir(upload_dir):
+        src = os.path.join(upload_dir, name)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(dest_dir, name)
+        try:
+            # Idempotency: skip if same filename + same size already in cloud.
+            # Size is a cheap good-enough check for UUID-named receipts that
+            # never change once written.
+            if (os.path.exists(dst)
+                    and os.path.getsize(dst) == os.path.getsize(src)):
+                skipped += 1
+                continue
+            shutil.copy2(src, dst)
+            copied += 1
+        except Exception:
+            app.logger.warning('Receipt backup failed for %s',
+                               name, exc_info=True)
+            failed += 1
+
+    if failed:
+        flash(f'Receipts backup finished with errors: {copied} copied, '
+              f'{skipped} already up to date, {failed} failed. Check '
+              f'logs/app.log for details.', 'error')
+    else:
+        flash(f'Receipts backed up to cloud: {copied} copied, '
+              f'{skipped} already up to date.', 'success')
+    return redirect(url_for('settings'))
+
+
+@app.route('/settings/restore-receipts', methods=['POST'])
+@login_required
+def settings_restore_receipts():
+    """Bulk pull: copy every file from <cloud>/uploads/ back into
+    app/uploads/. Used on a new machine right after a DB restore to recover
+    receipt images. Files already present locally are skipped (never
+    overwrites, so this is safe to click multiple times).
+    """
+    db = get_db()
+    folder = _get_cloud_backup_folder(db)
+    if not folder:
+        flash('Configure the Cloud Backup Folder first, then try again.',
+              'error')
+        return redirect(url_for('settings'))
+
+    src_dir = os.path.join(folder, 'uploads')
+    if not os.path.isdir(src_dir):
+        flash(f'No receipts folder in the cloud yet ({src_dir} does not '
+              f'exist). Either run "Backup Receipts Now" on your old '
+              f'computer, or check the folder path.', 'error')
+        return redirect(url_for('settings'))
+
+    upload_dir = app.config['UPLOAD_FOLDER']
+    try:
+        os.makedirs(upload_dir, exist_ok=True)
+    except Exception as e:
+        flash(f'Could not create {upload_dir}: {type(e).__name__}: {e}',
+              'error')
+        return redirect(url_for('settings'))
+
+    copied, skipped, failed = 0, 0, 0
+    for name in os.listdir(src_dir):
+        src = os.path.join(src_dir, name)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(upload_dir, name)
+        try:
+            # Never overwrite a file already on this machine — the local
+            # copy is authoritative since receipts are immutable once saved.
+            if os.path.exists(dst):
+                skipped += 1
+                continue
+            shutil.copy2(src, dst)
+            copied += 1
+        except Exception:
+            app.logger.warning('Receipt restore failed for %s',
+                               name, exc_info=True)
+            failed += 1
+
+    if failed:
+        flash(f'Receipts restore finished with errors: {copied} downloaded, '
+              f'{skipped} already on this computer, {failed} failed. Check '
+              f'logs/app.log for details.', 'error')
+    else:
+        flash(f'Receipts restored from cloud: {copied} downloaded, '
+              f'{skipped} already on this computer.', 'success')
+    return redirect(url_for('settings'))
+
+
 # --- Dashboard ---
 
 @app.route('/dashboard')
@@ -4145,13 +4284,20 @@ def _set_cloud_backup_status(db, ok, detail, path=None):
         pass
 
 
-def copy_to_cloud_backup(db, src_path, rel_dest):
+def copy_to_cloud_backup(db, src_path, rel_dest, silent=False):
     """Copy `src_path` to `<cloud_folder>/<rel_dest>`.
 
     Returns (ok: bool, detail: str). NEVER raises. If the cloud folder isn't
     configured, returns (False, 'not configured') without writing anything.
-    All failures are logged to logs/cloud_backup.log and recorded in the
-    settings table, so the primary download flow is never blocked.
+    All failures are logged to logs/cloud_backup.log.
+
+    When `silent=False` (default), success/failure is also recorded in the
+    settings table so the Settings page shows "last cloud copy" status. Used
+    for DB backups + day-close artifacts (user-facing events).
+
+    When `silent=True`, the settings table is NOT updated — used for routine
+    per-receipt mirroring so the status display keeps tracking meaningful
+    (DB-level) events rather than flipping on every image upload.
     """
     folder = _get_cloud_backup_folder(db)
     if not folder:
@@ -4167,7 +4313,8 @@ def copy_to_cloud_backup(db, src_path, rel_dest):
         os.makedirs(dest_dir, exist_ok=True)
 
         shutil.copy2(src_path, dest_path)
-        _set_cloud_backup_status(db, True, '', dest_path)
+        if not silent:
+            _set_cloud_backup_status(db, True, '', dest_path)
         return True, dest_path
     except Exception as e:
         detail = f'{type(e).__name__}: {e}'
@@ -4178,7 +4325,8 @@ def copy_to_cloud_backup(db, src_path, rel_dest):
                         f'failed "{rel_dest}": {detail}\n')
         except Exception:
             pass
-        _set_cloud_backup_status(db, False, detail)
+        if not silent:
+            _set_cloud_backup_status(db, False, detail)
         return False, detail
 
 
