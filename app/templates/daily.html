@@ -83,23 +83,17 @@
         <input type="hidden" name="date" value="{{ page_date }}">
         {% endif %}
         <input type="text" name="search" value="{{ search }}" placeholder="Search by name or description..." class="filter-input">
-        <select name="payment_type" class="filter-select">
-            <option value="all" {% if filter_payment == 'all' %}selected{% endif %}>All Types</option>
-            <option value="cash" {% if filter_payment == 'cash' %}selected{% endif %}>Cash</option>
-            <option value="online" {% if filter_payment == 'online' %}selected{% endif %}>Online</option>
-            <option value="bank_slip" {% if filter_payment == 'bank_slip' %}selected{% endif %}>Bank Slip</option>
-        </select>
+
         <select name="category" class="filter-select">
             <option value="all" {% if category_filter == 'all' %}selected{% endif %}>All Categories</option>
-            <option value="food" {% if category_filter == 'food' %}selected{% endif %}>Food / Tea</option>
-            <option value="transport" {% if category_filter == 'transport' %}selected{% endif %}>Transport</option>
-            <option value="bank" {% if category_filter == 'bank' %}selected{% endif %}>Bank Slip</option>
-            <option value="utility" {% if category_filter == 'utility' %}selected{% endif %}>Utility Bill</option>
-            <option value="zakat" {% if category_filter == 'zakat' %}selected{% endif %}>Zakat / Charity</option>
+            <option value="expense" {% if category_filter == 'expense' %}selected{% endif %}>Expense</option>
+            <option value="bank_slip" {% if category_filter == 'bank_slip' %}selected{% endif %}>Bank Slip</option>
+            <option value="drawing" {% if category_filter == 'drawing' %}selected{% endif %}>Drawing</option>
+            <option value="advance" {% if category_filter == 'advance' %}selected{% endif %}>Advance</option>
             <option value="other" {% if category_filter == 'other' %}selected{% endif %}>Other</option>
         </select>
         <button type="submit" class="btn btn-primary" style="padding: 10px 18px;">Search</button>
-        {% if search or filter_payment != 'all' or category_filter != 'all' %}
+        {% if search or category_filter != 'all' %}
         <a href="{{ url_for('daily', month=selected_month if view_mode == 'monthly' else None, year=selected_year if view_mode == 'monthly' else None, date=page_date if view_mode == 'daily' else None) }}" class="btn btn-ghost" style="padding: 10px 18px;">Clear</a>
         {% endif %}
     </form>
@@ -114,7 +108,7 @@
 <!-- RECOVERY Section -->
 <div class="card" style="margin-bottom: 24px;">
     <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title"><span style="color: var(--green);">&#9679;</span> Recovery</div>
+        <div class="section-title"><span class="section-emoji">&#128229;</span> <span style="color: var(--green);">&#9679;</span> Recovery</div>
         {% if not is_closed %}
         <button class="btn btn-recovery" onclick="openModal('recoveryModal')"><span class="btn-icon">+</span> Add Recovery <span class="kbd-hint">R</span></button>
         {% else %}
@@ -160,10 +154,68 @@
     </div>
 </div>
 
+<!-- ONLINE Section -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="section-header" style="border-top: none; padding-top: 0;">
+        <div class="section-title"><span class="section-emoji">&#128241;</span> <span style="color: var(--brand);">&#9679;</span> Online</div>
+        {% if not is_closed %}
+        <button class="btn btn-ghost" onclick="openModal('onlineModal')"><span class="btn-icon">+</span> Add Online <span class="kbd-hint">O</span></button>
+        {% else %}
+        <button class="btn btn-ghost" disabled><span class="btn-icon">&#128274;</span> Locked</button>
+        {% endif %}
+    </div>
+
+    {% if online_entries %}
+        {% for entry in online_entries %}
+        <div class="entry-row">
+            {% if view_mode == 'monthly' %}
+            <div class="entry-date">{{ entry['date']|monthday }}</div>
+            {% endif %}
+            <div class="entry-dot"></div>
+            <div class="entry-name">
+                <div class="entry-name-text">
+                    {{ (online_source_labels.get(entry['online_source'], 'Other')) if online_source_labels is defined else (entry['online_source'] or 'Other') }}
+                    {% if entry['online_source'] == 'bank_transfer' and entry['bank_name'] %}
+                    <span class="entry-badge transfer">{{ entry['bank_name'] }}</span>
+                    {% endif %}
+                </div>
+                <div class="entry-notes">{{ entry['notes'] or '' }}</div>
+            </div>
+            <div class="entry-amount mono">{{ entry['amount']|pkr }}</div>
+            <div class="entry-actions">
+                {% if entry['receipt'] %}
+                <button type="button" class="btn btn-sm btn-ghost"
+                        onclick="openReceiptModal('{{ url_for('uploaded_file', filename=entry['receipt']) }}')">Screenshot</button>
+                {% endif %}
+                {% if not is_closed %}
+                <a href="{{ url_for('edit_entry', entry_id=entry['id']) }}"
+                   class="btn btn-sm btn-edit">&#9998; Edit</a>
+                <button type="button" class="btn btn-sm btn-del"
+                        onclick="confirmDelete('{{ url_for('delete_entry', entry_id=entry['id']) }}', 'Online entry')">&#10005; Del</button>
+                {% else %}
+                <span class="locked-badge">&#128274;</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-msg">
+        <span class="empty-icon">&#128241;</span>
+        <div class="empty-text">No online entries yet</div>
+        <div class="empty-hint">Click + Add Online or press O to get started</div>
+    </div>
+    {% endif %}
+
+    <div class="section-total">
+        <span>Total Online</span>
+        <span class="amount mono">{{ total_online|pkr }}</span>
+    </div>
+</div>
+
 <!-- EXPENSES Section -->
 <div class="card" style="margin-bottom: 24px;">
     <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title"><span style="color: var(--red);">&#9679;</span> Expenses</div>
+        <div class="section-title"><span class="section-emoji">&#128228;</span> <span style="color: var(--red);">&#9679;</span> Expenses</div>
         {% if not is_closed %}
         <button class="btn btn-expense" onclick="openModal('expenseModal')"><span class="btn-icon">+</span> Add Expense <span class="kbd-hint">E</span></button>
         {% else %}
@@ -173,15 +225,27 @@
 
     {% if expenses %}
         {% for entry in expenses %}
-        <div class="entry-row">
+        {% set desc_lower = (entry['description'] or '')|lower %}
+        {% set is_transfer = entry['category'] == 'bank_slip' or 'bank slip' in desc_lower %}
+        {% set is_drawing = (not is_transfer) and ('waqar' in desc_lower or 'waqas' in desc_lower or 'home' in desc_lower) %}
+        <div class="entry-row{% if is_transfer %} transfer-highlight{% elif is_drawing %} drawing-highlight{% endif %}">
             {% if view_mode == 'monthly' %}
             <div class="entry-date">{{ entry['date']|monthday }}</div>
             {% endif %}
             <div class="entry-dot expense"></div>
             <div class="entry-name">
-                <div class="entry-name-text">{{ entry['description'] }}</div>
+                <div class="entry-name-text">
+                    {{ entry['description'] }}
+                    {% if is_transfer %}
+                    <span class="entry-badge transfer">Transfer</span>
+                    {% elif is_drawing %}
+                    <span class="entry-badge drawing">Drawing</span>
+                    {% else %}
+                    <span class="entry-badge expense">Expense</span>
+                    {% endif %}
+                </div>
                 {% if entry['category'] and entry['category'] != 'other' %}
-                <div class="entry-category">{{ entry['category']|capitalize }}</div>
+                <div class="entry-category">{{ category_labels.get(entry['category'], entry['category']|capitalize) }}</div>
                 {% endif %}
                 <div class="entry-notes">{{ entry['notes'] or '' }}</div>
             </div>
@@ -228,6 +292,10 @@
         <div class="stat-label">Total Recovery <span class="stat-trend up">&#9650;</span></div>
         <div class="stat-value mono">{{ total_recovery|pkr }}</div>
     </div>
+    <div class="summary-stat-card">
+        <div class="stat-label">Online Total</div>
+        <div class="stat-value mono">{{ total_online|pkr }}</div>
+    </div>
     <div class="summary-stat-card red">
         <div class="stat-label">Total Expenses <span class="stat-trend down">&#9660;</span></div>
         <div class="stat-value mono">{{ total_expenses|pkr }}</div>
@@ -258,18 +326,56 @@
         <span class="summary-amount mono recovery">{{ total_recovery|pkr }}</span>
     </div>
     <div class="summary-row">
+        <span class="summary-label"><span class="operator">&minus;</span> Online</span>
+        <span class="summary-amount mono">{{ total_online|pkr }}</span>
+    </div>
+    <div class="summary-row outflow" style="background: rgba(34, 197, 94, 0.08); border-radius: 10px; padding: 12px 10px;">
+        <span class="summary-label"><span class="operator">=</span> Cash from Recovery</span>
+        <span class="summary-amount mono recovery" style="font-weight: 800; font-size: 18px;">{{ total_cash|pkr }}</span>
+    </div>
+    <div class="summary-row">
         <span class="summary-label"><span class="operator">&minus;</span> Total Expenses</span>
         <span class="summary-amount mono expense">{{ total_expenses|pkr }}</span>
     </div>
-    {% if total_bank_transfer and total_bank_transfer > 0 %}
     <div class="summary-row">
         <span class="summary-label"><span class="operator">&minus;</span> Bank Transfers</span>
         <span class="summary-amount mono">{{ total_bank_transfer|pkr }}</span>
+    </div>
+    {% if total_bank_transfer and total_bank_transfer > 0 %}
+    <div class="summary-row outflow">
+        <span class="summary-label"><span class="operator">=</span> Total Outflow</span>
+        <span class="summary-amount mono expense">{{ total_outflow|pkr }}</span>
     </div>
     {% endif %}
     <div class="summary-row closing">
         <span class="summary-label"><strong>= Closing Balance</strong></span>
         <span class="summary-amount mono closing-hero {% if closing_balance < 0 %}negative{% endif %}">{{ closing_balance|pkr }}</span>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 12px;">
+    {% if cash_balanced %}
+    <div class="summary-row" style="border-bottom: 0;">
+        <span class="summary-label" style="font-weight: 700; color: var(--green);">&#10004; Balanced</span>
+        <span class="summary-amount mono"></span>
+    </div>
+    {% else %}
+    <div class="summary-row" style="border-bottom: 0;">
+        <span class="summary-label" style="font-weight: 700; color: var(--red);">&#10060; Overdraft: {{ cash_mismatch|pkr }}</span>
+        <span class="summary-amount mono expense"></span>
+    </div>
+    {% endif %}
+    <button type="button" class="btn btn-ghost" id="toggleAuditBreakdown" style="margin-top: 8px;">
+        Show Calculation Breakdown
+    </button>
+    <div id="auditBreakdownPanel" style="display:none; margin-top:10px;">
+        <div class="summary-row"><span class="summary-label">Opening</span><span class="summary-amount mono">{{ opening_balance|pkr }}</span></div>
+        <div class="summary-row"><span class="summary-label">+ Recovery</span><span class="summary-amount mono recovery">{{ total_recovery|pkr }}</span></div>
+        <div class="summary-row"><span class="summary-label">- Online</span><span class="summary-amount mono">{{ total_online|pkr }}</span></div>
+        <div class="summary-row"><span class="summary-label">= Cash</span><span class="summary-amount mono recovery">{{ total_cash|pkr }}</span></div>
+        <div class="summary-row"><span class="summary-label">- Expense</span><span class="summary-amount mono expense">{{ total_expenses|pkr }}</span></div>
+        <div class="summary-row"><span class="summary-label">- Bank</span><span class="summary-amount mono">{{ total_bank_transfer|pkr }}</span></div>
+        <div class="summary-row closing"><span class="summary-label"><strong>= Closing</strong></span><span class="summary-amount mono {% if closing_balance < 0 %}negative{% endif %}">{{ closing_balance|pkr }}</span></div>
     </div>
 </div>
 
@@ -354,21 +460,25 @@
         <form method="POST" action="{{ url_for('add_entry') }}" enctype="multipart/form-data" data-toast="Expense saved successfully" data-validate="1">
             <input type="hidden" name="type" value="expense">
             <input type="hidden" name="confirm_duplicate" value="0">
+            <div class="form-group">
+                <label for="expense_category">Category</label>
+                <select name="category" id="expense_category" required tabindex="1">
+                    <option value="" selected disabled>Select a category…</option>
+                    <option value="expense">Expense</option>
+                    <option value="bank_slip">Bank Slip</option>
+                    <option value="drawing">Drawing</option>
+                    <option value="advance">Advance</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
             <div class="form-group suggestions-wrap">
-                <label for="expense_description">Description</label>
+                <label for="expense_description" id="expense_description_label">Description</label>
                 <input type="text" id="expense_description" name="description" required
-                       placeholder="e.g. Food / Tea" autocomplete="off" tabindex="1"
+                       placeholder="e.g. Food / Tea" autocomplete="off" tabindex="2"
                        data-suggest="expense">
                 <div class="suggestions-list" id="expenseSuggestions" style="display:none;"></div>
             </div>
-            <div class="form-group">
-                <label for="expense_payment_type">Payment Type</label>
-                <select name="payment_type" id="expense_payment_type" onchange="toggleReceiptField()" tabindex="2">
-                    <option value="cash">Cash</option>
-                    <option value="online">Online</option>
-                    <option value="bank_slip">Bank Slip</option>
-                </select>
-            </div>
+
             <div class="form-group">
                 <label for="expense_amount" id="expense_amount_label">Amount (PKR)</label>
                 <input type="number" id="expense_amount" name="amount" required
@@ -391,6 +501,55 @@
                 <button type="submit" class="btn btn-primary" data-no-stay="1" tabindex="6" style="order:3;">Save Entry</button>
                 <button type="submit" class="btn btn-ghost" data-stay-open="expenseModal" tabindex="7" style="order:2;">Save &amp; Add Another</button>
                 <button type="button" onclick="closeModal('expenseModal')" class="btn btn-ghost" tabindex="9" style="order:1;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ONLINE MODAL -->
+<div id="onlineModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title"><span style="color: var(--brand);">&#9679;</span> Add Online Entry</div>
+            <button type="button" onclick="closeModal('onlineModal')" class="modal-close" tabindex="-1">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('add_entry') }}" enctype="multipart/form-data" data-toast="Online saved successfully" data-validate="1">
+            <input type="hidden" name="type" value="online">
+            <input type="hidden" name="confirm_duplicate" value="0">
+            <div class="form-group">
+                <label for="online_source">Source</label>
+                <select name="online_source" id="online_source" required>
+                    <option value="" selected disabled>Select source…</option>
+                    <option value="easypaisa">Easypaisa</option>
+                    <option value="jazzcash">JazzCash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="form-group" id="online_bank_group" style="display:none;">
+                <label for="online_bank_name">Bank Name</label>
+                <input type="text" id="online_bank_name" name="bank_name" placeholder="e.g. MCB">
+            </div>
+            <div class="form-group">
+                <label for="online_amount">Amount (PKR)</label>
+                <input type="number" id="online_amount" name="amount" required min="1" step="1" class="amount-input">
+            </div>
+            <div class="form-group">
+                <label for="online_receipt">Screenshot (optional)</label>
+                <input type="file" id="online_receipt" name="receipt" accept="image/*">
+            </div>
+            <div class="form-group">
+                <label for="online_notes">Notes (optional)</label>
+                <input type="text" id="online_notes" name="notes">
+            </div>
+            <div class="form-group">
+                <label for="online_date">Date</label>
+                <input type="date" id="online_date" name="date" value="{{ page_date }}" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" data-no-stay="1" style="order:3;">Save Entry</button>
+                <button type="submit" class="btn btn-ghost" data-stay-open="onlineModal" style="order:2;">Save &amp; Add Another</button>
+                <button type="button" onclick="closeModal('onlineModal')" class="btn btn-ghost" style="order:1;">Cancel</button>
             </div>
         </form>
     </div>
@@ -604,7 +763,7 @@ function playTickSound() {
 })();
 
 // ============================================================
-// SUGGESTIONS ENGINE (localStorage-backed)
+// SUGGESTIONS ENGINE (localStorage + API backed)
 // ============================================================
 var SuggestEngine = {
     _key: function(type) { return 'wb_recent_' + type; },
@@ -621,11 +780,28 @@ var SuggestEngine = {
         localStorage.setItem(key, JSON.stringify(list));
     },
 
-    get: function(type, query) {
-        var list = JSON.parse(localStorage.getItem(this._key(type)) || '[]');
-        if (!query) return list.slice(0, 6);
-        var q = query.toLowerCase();
-        return list.filter(function(v) { return v.toLowerCase().indexOf(q) !== -1; }).slice(0, 6);
+    get: function(type, query, callback) {
+        var localList = JSON.parse(localStorage.getItem(this._key(type)) || '[]');
+        var q = (query || '').toLowerCase();
+        var filteredLocal = localList.filter(function(v) { return v.toLowerCase().indexOf(q) !== -1; }).slice(0, 6);
+
+        if (type === 'expense' && callback) {
+             fetch('{{ url_for("api_descriptions") }}')
+                .then(function(r) { return r.ok ? r.json() : []; })
+                .then(function(globalList) {
+                    // Merge local recent and global frequent
+                    var filteredGlobal = globalList.filter(function(v) {
+                        return v.toLowerCase().indexOf(q) !== -1 && 
+                               !filteredLocal.some(function(l){ return l.toLowerCase() === v.toLowerCase(); });
+                    }).slice(0, 8);
+                    callback(filteredLocal.concat(filteredGlobal).slice(0, 10));
+                })
+                .catch(function() { callback(filteredLocal); });
+        } else if (callback) {
+            callback(filteredLocal);
+        } else {
+            return filteredLocal;
+        }
     }
 };
 
@@ -672,13 +848,14 @@ document.querySelectorAll('[data-suggest]').forEach(function(input) {
         activeIdx = -1;
     }
 
-    input.addEventListener('focus', function() {
-        render(SuggestEngine.get(type, input.value));
-    });
+    function update() {
+        SuggestEngine.get(type, input.value, function(items) {
+            render(items);
+        });
+    }
 
-    input.addEventListener('input', function() {
-        render(SuggestEngine.get(type, input.value));
-    });
+    input.addEventListener('focus', update);
+    input.addEventListener('input', update);
 
     input.addEventListener('blur', function() {
         setTimeout(function() { listEl.style.display = 'none'; }, 150);
@@ -1161,6 +1338,7 @@ document.getElementById('receiptModal').addEventListener('click', function(e) {
 // ============================================================
 var modalFocus = {
     recoveryModal: 'recovery_description',
+    onlineModal: 'online_source',
     expenseModal: 'expense_description'
 };
 
@@ -1245,6 +1423,7 @@ document.querySelectorAll('button[data-no-stay]').forEach(function(btn) {
 
 // Amount field: Enter moves to Notes (not submit). Focus selects existing text.
 [['recovery_amount', 'recovery_notes'],
+ ['online_amount',   'online_notes'],
  ['expense_amount',  'expense_notes']].forEach(function(pair) {
     var amt = document.getElementById(pair[0]);
     var notes = document.getElementById(pair[1]);
@@ -1259,7 +1438,7 @@ document.querySelectorAll('button[data-no-stay]').forEach(function(btn) {
 });
 
 // Ctrl+Enter anywhere inside an entry modal → trigger "Save & Add Another"
-['recoveryModal', 'expenseModal'].forEach(function(mid) {
+['recoveryModal', 'onlineModal', 'expenseModal'].forEach(function(mid) {
     var modal = document.getElementById(mid);
     if (!modal) return;
     modal.addEventListener('keydown', function(e) {
@@ -1283,7 +1462,7 @@ document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
 });
 
 // ============================================================
-// KEYBOARD SHORTCUTS — R / E / ESC
+// KEYBOARD SHORTCUTS — R / O / E / ESC
 // ============================================================
 document.addEventListener('keydown', function(e) {
     var tag = (e.target.tagName || '').toLowerCase();
@@ -1308,23 +1487,44 @@ document.addEventListener('keydown', function(e) {
 
     {% if not is_closed %}
     if (e.key === 'r' || e.key === 'R') { e.preventDefault(); openModal('recoveryModal'); }
+    if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openModal('onlineModal'); }
     if (e.key === 'e' || e.key === 'E') { e.preventDefault(); openModal('expenseModal'); }
     {% endif %}
 });
 
 // ============================================================
+// CATEGORY → DESCRIPTION LABEL SWAP
+// Advance rows use the Description field as the person's name.
+// ============================================================
+(function() {
+    var catSel = document.getElementById('expense_category');
+    var label = document.getElementById('expense_description_label');
+    var desc = document.getElementById('expense_description');
+    if (!catSel || !label || !desc) return;
+    function sync() {
+        if (catSel.value === 'advance') {
+            label.textContent = 'Person Name';
+            desc.placeholder = 'e.g. Amanullah';
+        } else {
+            label.textContent = 'Description';
+            desc.placeholder = 'e.g. Food / Tea';
+        }
+    }
+    catSel.addEventListener('change', sync);
+    sync();
+})();
+
+// ============================================================
 // TOGGLE RECEIPT FIELD
 // ============================================================
 function toggleReceiptField() {
-    var pt = document.getElementById('expense_payment_type').value;
+    var catSel = document.getElementById('expense_category');
+    if (!catSel) return;
+    var cat = catSel.value;
     var rf = document.getElementById('receipt-field');
     var al = document.getElementById('expense_amount_label');
     var rl = document.getElementById('expense_receipt_label');
-    if (pt === 'online') {
-        rf.style.display = 'block';
-        al.textContent = 'Transaction Amount (confirm from slip)';
-        if (rl) rl.textContent = 'Upload Online Payment Screenshot';
-    } else if (pt === 'bank_slip') {
+    if (cat === 'bank_slip') {
         rf.style.display = 'block';
         al.textContent = 'Slip Amount (confirm from slip)';
         if (rl) rl.textContent = 'Upload Bank Slip Image';
@@ -1334,6 +1534,34 @@ function toggleReceiptField() {
         if (rl) rl.textContent = 'Upload Transaction Screenshot';
     }
 }
+(function() {
+    var catSel = document.getElementById('expense_category');
+    if (catSel) {
+        catSel.addEventListener('change', toggleReceiptField);
+        toggleReceiptField();
+    }
+})();
+
+function toggleOnlineBankName() {
+    var src = document.getElementById('online_source');
+    var grp = document.getElementById('online_bank_group');
+    var input = document.getElementById('online_bank_name');
+    if (!src || !grp || !input) return;
+    if (src.value === 'bank_transfer') {
+        grp.style.display = 'block';
+        input.required = true;
+    } else {
+        grp.style.display = 'none';
+        input.required = false;
+        input.value = '';
+    }
+}
+(function() {
+    var src = document.getElementById('online_source');
+    if (!src) return;
+    src.addEventListener('change', toggleOnlineBankName);
+    toggleOnlineBankName();
+})();
 
 // ============================================================
 // DATE PICKER
@@ -1352,8 +1580,64 @@ if (datePicker) {
     // Current closing balance (cash on hand) for this page view
     var balEl = document.getElementById('currentClosingBalance');
     var currentBalance = balEl ? parseInt(balEl.getAttribute('data-value') || '0', 10) : 0;
+    var currentCash = {{ total_cash|int }};
+    var currentExpense = {{ total_expenses|int }};
+    var currentBank = {{ total_bank_transfer|int }};
+    // Opening balance carried from previous days — MUST be included in the
+    // cash-guard projection. Without it, the guard wrongly blocks expenses
+    // that the opening cash can legitimately cover.
+    var currentOpening = {{ opening_balance|int }};
+
+    function applyCashGuardState(form) {
+        var typeInput = form.querySelector('input[name="type"]');
+        var amtInput = form.querySelector('input[name="amount"]');
+        if (!typeInput || !amtInput) return true;
+        var amount = parseInt(amtInput.value || '0', 10);
+        if (!amount || amount <= 0) amount = 0;
+        var projectedCash = currentCash;
+        var projectedExpense = currentExpense;
+        var projectedBank = currentBank;
+        var type = typeInput.value;
+        // Only cash OUTFLOWS (expense, bank slip) can trigger the cash-guard.
+        // Income entries (recovery, online) are inflows and never block.
+        var isOutflow = false;
+        if (type === 'expense') {
+            var catSel = form.querySelector('select[name="category"]');
+            var cat = catSel ? (catSel.value || '') : '';
+            if (cat === 'bank_slip') projectedBank += amount;
+            else projectedExpense += amount;
+            isOutflow = true;
+        }
+        // Correct invariant: closing balance must stay >= 0 after this entry.
+        //   closing = opening + cash - expense - bank
+        // The previous check used `cash >= expense + bank` which ignored the
+        // opening balance carried from prior days — that wrongly blocked any
+        // legitimate expense funded by yesterday's leftover cash.
+        var projectedClosing = currentOpening + projectedCash - projectedExpense - projectedBank;
+        var valid = !isOutflow || (projectedClosing >= 0);
+        var msg = form.querySelector('.cash-guard-msg');
+        if (!msg) {
+            msg = document.createElement('div');
+            msg.className = 'flash flash-error cash-guard-msg';
+            msg.style.display = 'none';
+            msg.style.marginTop = '10px';
+            form.appendChild(msg);
+        }
+        msg.textContent = 'Cash is less than total outflow (Expense + Bank)';
+        msg.style.display = valid ? 'none' : 'block';
+        form.querySelectorAll('button[type="submit"]').forEach(function(btn) {
+            btn.disabled = !valid;
+        });
+        return valid;
+    }
 
     document.querySelectorAll('form[data-validate="1"]').forEach(function(form) {
+        form.querySelectorAll('input[name="amount"], select[name="category"], select[name="online_source"]').forEach(function(el) {
+            el.addEventListener('input', function() { applyCashGuardState(form); });
+            el.addEventListener('change', function() { applyCashGuardState(form); });
+        });
+        applyCashGuardState(form);
+
         form.addEventListener('submit', function(e) {
             // Skip re-validation if already confirmed
             if (form.getAttribute('data-confirmed') === '1') return;
@@ -1367,6 +1651,11 @@ if (datePicker) {
             var entryType = typeInput.value;
             var amount = parseInt(amtInput.value || '0', 10);
             if (!amount || amount <= 0) return;
+
+            if (!applyCashGuardState(form)) {
+                e.preventDefault();
+                return;
+            }
 
             // --- Recovery must have a selected salesman_id ---
             if (entryType === 'recovery') {
@@ -1401,31 +1690,9 @@ if (datePicker) {
                 }
             }
 
-            // --- Duplicate check (async) ---
-            e.preventDefault();
-            var qs = new URLSearchParams();
-            qs.append('type', entryType);
-            qs.append('date', dateInput.value);
-            qs.append('description', descInput.value);
-            qs.append('amount', String(amount));
-
-            fetch('{{ url_for("api_check_duplicate") }}?' + qs.toString(), {
-                method: 'GET'
-            }).then(function(r) { return r.ok ? r.json() : { duplicate: false }; })
-              .catch(function() { return { duplicate: false }; })
-              .then(function(data) {
-                if (data && data.duplicate) {
-                    var ok = window.confirm(
-                        'A similar entry already exists for this date, amount, and description.\n\n'
-                        + 'Save it anyway?'
-                    );
-                    if (!ok) return;
-                    var cd = form.querySelector('input[name="confirm_duplicate"]');
-                    if (cd) cd.value = '1';
-                }
-                form.setAttribute('data-confirmed', '1');
-                form.submit();
-              });
+            // Duplicate entries are allowed. The backend de-duplicates only
+            // to log a flash — it does NOT block the save. We let the form
+            // submit in the same request so the attached file is preserved.
         });
     });
 })();
@@ -1473,6 +1740,20 @@ document.querySelectorAll('.modal-card form').forEach(function(form) {
         });
     }, { threshold: 0.1 });
     obs.observe(cards);
+})();
+
+// ============================================================
+// AUDIT BREAKDOWN TOGGLE
+// ============================================================
+(function() {
+    var btn = document.getElementById('toggleAuditBreakdown');
+    var panel = document.getElementById('auditBreakdownPanel');
+    if (!btn || !panel) return;
+    btn.addEventListener('click', function() {
+        var open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : 'block';
+        btn.textContent = open ? 'Show Calculation Breakdown' : 'Hide Calculation Breakdown';
+    });
 })();
 </script>
 {% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong — {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="form-box" style="max-width: 560px; text-align: center;">
+    <h1 style="margin-bottom: 8px;">Something went wrong</h1>
+    <p style="color: var(--muted, #888); margin-bottom: 12px;">
+        An unexpected error occurred. The issue has been logged.
+        Please try again, or restart the app if the problem persists.
+    </p>
+
+    {% if error_id %}
+    <p style="font-size: 13px; color: var(--muted, #888); margin-bottom: 20px;">
+        Error ID: <span class="mono">{{ error_id }}</span>
+    </p>
+    {% endif %}
+
+    <div class="form-actions" style="justify-content: center; gap: 10px;">
+        <a href="javascript:history.back()" class="btn btn-cancel">Try Again</a>
+        <a href="{{ url_for('daily') }}" class="btn btn-primary">Go back to Daily Page</a>
+    </div>
+</div>
+{% endblock %}

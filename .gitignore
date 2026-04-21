@@ -28,6 +28,14 @@ backups/
 
 # Claude / local config
 .claude/
+.cursor/
 
 # Secret key config
 app/config.py
+
+# User-uploaded receipt images (user data, never commit)
+app/uploads/
+
+# Debug instrumentation logs (session-scoped, auto-generated)
+app/debug-*.log
+app/init_error.log

@@ -1,662 +1,437 @@
 {% extends "base.html" %}
 {% block title %}Reports — {{ business_name }}{% endblock %}
-
 {% block content %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+{# --------------------------------------------------------------------------
+   Clean, minimal Reports page. No charts, no duplicate totals, no clutter.
+   Four sections only:
+     1. Overview (6 cards)
+     2. Online Breakdown (Easypaisa / JazzCash / Bank)
+     3. Expense Breakdown (by category)
+     4. Daily Table (Date, Recovery, Online, Cash, Expense, Bank, Closing)
+   Filters: Date range + optional Online Source + optional Expense Category.
+   -------------------------------------------------------------------------- #}
+
+{# Derived totals. Backend math is untouched — these are simple subtractions
+   of already-computed totals for display-only fields. `total_online` is
+   already adjusted upstream when an Online Source filter is active, so it
+   is the correct denominator for Online Breakdown percentages too. #}
+{% set cash_total = (total_recovery or 0) - (total_online or 0) %}
+
 <!-- Page Header -->
 <div class="page-header">
-    <div>
-        <div class="page-title">{{ business_name }} <span class="accent">Reports</span></div>
-        <div class="page-subtitle">
-            {% if date_from or date_to %}
-                Showing {{ date_from or 'start' }} to {{ date_to or 'today' }}
-            {% else %}
-                All-time cash summary
-            {% endif %}
-        </div>
+  <div>
+    <div class="page-title">
+      {{ business_name }} <span class="accent">Reports</span>
     </div>
+    <div class="page-subtitle">
+      {% if date_from and date_to %}Showing {{ date_from }} to {{ date_to }}
+      {% elif date_from %}Showing from {{ date_from }} onwards
+      {% elif date_to %}Showing up to {{ date_to }}
+      {% else %}All-time summary
+      {% endif %}
+    </div>
+  </div>
 </div>
 
-<!-- Date Filter -->
-<div class="card" style="margin-bottom: 16px;">
-    <form method="GET" action="{{ url_for('reports') }}" class="filter-form">
-        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
-            <label for="from">From</label>
-            <input type="date" id="from" name="from" value="{{ date_from }}" class="filter-input">
-        </div>
-        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 140px;">
-            <label for="to">To</label>
-            <input type="date" id="to" name="to" value="{{ date_to }}" class="filter-input">
-        </div>
-        <button type="submit" class="btn btn-primary" style="align-self: flex-end;">Filter</button>
-        {% if date_from or date_to %}
-        <a href="{{ url_for('reports') }}" class="btn btn-ghost" style="align-self: flex-end;">Clear</a>
-        {% endif %}
-    </form>
-</div>
-
-<!-- Monthly PDF Export -->
-{% set _now = current_date if current_date else None %}
-<div class="card" style="margin-bottom: 28px;">
-    <form method="GET" action="{{ url_for('reports_monthly_pdf') }}" class="filter-form" target="_blank">
-        <div class="form-group" style="margin-bottom: 0; flex: 0 0 160px;">
-            <label for="pdf_month">Month</label>
-            <select id="pdf_month" name="month" class="filter-input">
-                {% set months = [
-                    (1, 'January'), (2, 'February'), (3, 'March'), (4, 'April'),
-                    (5, 'May'), (6, 'June'), (7, 'July'), (8, 'August'),
-                    (9, 'September'), (10, 'October'), (11, 'November'), (12, 'December')
-                ] %}
-                {% for num, name in months %}
-                <option value="{{ num }}" {% if num == pdf_default_month %}selected{% endif %}>{{ name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group" style="margin-bottom: 0; flex: 0 0 120px;">
-            <label for="pdf_year">Year</label>
-            <select id="pdf_year" name="year" class="filter-input">
-                {% for y in pdf_years %}
-                <option value="{{ y }}" {% if y == pdf_default_year %}selected{% endif %}>{{ y }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary" style="align-self: flex-end;">
-            <span class="btn-icon">&#128196;</span> Download Monthly PDF
-        </button>
-    </form>
-</div>
-
-<!-- Overall Summary Cards -->
-<div class="summary-cards">
-    <div class="summary-stat-card green">
-        <div class="stat-label">Total Recovery <span class="stat-trend up">&#9650;</span></div>
-        <div class="stat-value mono" data-value="{{ total_recovery }}">{{ total_recovery|pkr }}</div>
-    </div>
-    <div class="summary-stat-card red">
-        <div class="stat-label">Total Expenses <span class="stat-trend down">&#9660;</span></div>
-        <div class="stat-value mono" data-value="{{ total_expense }}">{{ total_expense|pkr }}</div>
-    </div>
-    <div class="summary-stat-card highlight">
-        <div class="stat-label">Closing Balance</div>
-        <div class="stat-value mono {% if closing_balance < 0 %}negative-balance{% endif %}" data-value="{{ closing_balance }}">{{ closing_balance|pkr }}</div>
-    </div>
-</div>
-
-{% if total_bank_transfer and total_bank_transfer > 0 %}
-<div class="bank-transfer-strip">
-    <span class="bt-icon">&#127974;</span>
-    <span class="bt-label">Bank Transfers (excluded from expenses)</span>
-    <span class="bt-amount mono amt-bank">{{ total_bank_transfer|pkr }}</span>
-</div>
-{% endif %}
-
-<!-- Cash Insights Panel -->
-{% if insights %}
-<div class="card" style="margin-top: 24px; padding: 24px 28px;">
-    <div class="section-title" style="margin-bottom: 18px; font-size: 15px;">🔍 Cash Insights
-        <span style="font-weight: 400; color: var(--text3); font-size: 12px; margin-left: 6px;">{{ insights.num_days }} day{{ 's' if insights.num_days != 1 }}</span>
-    </div>
-    <div class="insights-grid">
-        <div class="insight-card insight-best">
-            <div class="insight-icon">▲</div>
-            <div class="insight-body">
-                <div class="insight-label">Best Recovery Day</div>
-                {% if insights.best_recovery_date %}
-                <div class="insight-date">{{ insights.best_recovery_date|monthday }}</div>
-                <div class="insight-value mono recovery" data-value="{{ insights.best_recovery_amount }}">{{ insights.best_recovery_amount|pkr }}</div>
-                {% else %}
-                <div class="insight-value mono" style="opacity: 0.5;">—</div>
-                {% endif %}
-            </div>
-        </div>
-        <div class="insight-card insight-worst">
-            <div class="insight-icon">▼</div>
-            <div class="insight-body">
-                <div class="insight-label">Highest Expense Day</div>
-                {% if insights.highest_expense_date %}
-                <div class="insight-date">{{ insights.highest_expense_date|monthday }}</div>
-                <div class="insight-value mono negative" data-value="{{ insights.highest_expense_amount }}">{{ insights.highest_expense_amount|pkr }}</div>
-                {% else %}
-                <div class="insight-value mono" style="opacity: 0.5;">—</div>
-                {% endif %}
-            </div>
-        </div>
-        <div class="insight-card insight-avg">
-            <div class="insight-icon">◆</div>
-            <div class="insight-body">
-                <div class="insight-label">Highest Closing Balance</div>
-                {% if insights.highest_balance_date %}
-                <div class="insight-date">{{ insights.highest_balance_date|monthday }}</div>
-                <div class="insight-value mono {% if insights.highest_balance_amount >= 0 %}recovery{% else %}negative{% endif %}" data-value="{{ insights.highest_balance_amount }}">{{ insights.highest_balance_amount|pkr }}</div>
-                {% else %}
-                <div class="insight-value mono" style="opacity: 0.5;">—</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Charts -->
-{% if not daily_data %}
-<div class="card" style="margin-top: 24px; padding: 48px 24px;">
-    <div class="empty-state">
-        <div class="empty-state-icon">&#128202;</div>
-        <div class="empty-state-text">No data available yet</div>
-    </div>
-</div>
-{% endif %}
-{% if daily_data %}
-<!-- Balance Trend — Full Width -->
-<div class="card" style="margin-top: 24px; padding: 24px;">
-    <div class="section-title" style="margin-bottom: 16px; font-size: 15px;">💹 Balance Trend</div>
-    <div class="chart-container">
-        <div class="chart-skeleton"></div>
-        <canvas id="cashFlowChart"></canvas>
-    </div>
-</div>
-
-<!-- Recovery vs Expenses — Full Width -->
-<div class="card" style="margin-top: 20px; padding: 24px;">
-    <div class="section-title" style="margin-bottom: 16px; font-size: 15px;">📊 Recovery vs Expenses</div>
-    <div class="chart-container">
-        <div class="chart-skeleton"></div>
-        <canvas id="barChart"></canvas>
-    </div>
-</div>
-
-<!-- Expense by Category + Bank vs Cash Summary (side by side) -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px;">
-    <!-- Expense by Category -->
-    <div class="card" style="padding: 24px;">
-        <div class="section-header" style="border-top: none; padding-top: 0;">
-            <div class="section-title">💰 Expense by Category</div>
-        </div>
-        {% if category_totals %}
-            {% for cat in category_totals %}
-            <div class="summary-row cat-row cat-{{ cat.key }}">
-                <span class="summary-label"><span class="cat-dot"></span>{{ cat.name }}</span>
-                <span class="summary-amount mono">{{ cat.amount|pkr }}</span>
-            </div>
-            {% endfor %}
-            <div class="section-total" style="margin-top: 12px;">
-                <span>Total Expenses</span>
-                <span class="amount mono amt-expense">{{ total_expense|pkr }}</span>
-            </div>
-        {% else %}
-            <div class="empty-msg">
-                <div class="empty-text">No expenses in this period.</div>
-            </div>
-        {% endif %}
+<!-- Filters + Monthly PDF in a single roomy card -->
+<div class="card reports-filter-card">
+  <div class="filter-helper">Filter by date, salesman, online source, or expense category</div>
+  <form method="GET" action="{{ url_for('reports') }}" class="filter-form reports-filter-form" id="reportsFilterForm">
+    <div class="form-group">
+      <label for="from">From</label>
+      <input type="date" id="from" name="from" value="{{ date_from }}" class="filter-input" />
     </div>
 
-    <!-- Bank vs Cash Summary -->
-    <div class="card" style="padding: 24px;">
-        <div class="section-header" style="border-top: none; padding-top: 0;">
-            <div class="section-title">🏦 Bank vs Cash Summary</div>
-        </div>
-        <div class="summary-row pay-row pay-cash">
-            <span class="summary-label"><span class="pay-dot cash"></span>Total Cash Expense</span>
-            <span class="summary-amount mono">{{ payment_breakdown.cash|pkr }}</span>
-        </div>
-        <div class="summary-row pay-row pay-online">
-            <span class="summary-label"><span class="pay-dot online"></span>Total Online Expense</span>
-            <span class="summary-amount mono">{{ payment_breakdown.online|pkr }}</span>
-        </div>
-        <div class="summary-row pay-row pay-bank">
-            <span class="summary-label"><span class="pay-dot bank"></span>Total Bank Transfer</span>
-            <span class="summary-amount mono">{{ payment_breakdown.bank_slip|pkr }}</span>
-        </div>
-        <div class="section-total" style="margin-top: 12px;">
-            <span>Combined</span>
-            <span class="amount mono amt-neutral">{{ (payment_breakdown.cash + payment_breakdown.online + payment_breakdown.bank_slip)|pkr }}</span>
-        </div>
+    <div class="form-group">
+      <label for="to">To</label>
+      <input type="date" id="to" name="to" value="{{ date_to }}" class="filter-input" />
     </div>
-</div>
 
-{% if salesmen %}
-<!-- Top Salesmen + Salesman Chart -->
-<div class="card" style="margin-top: 20px; padding: 24px;">
-    <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">🏆 Top Salesmen</div>
-    </div>
-    <div class="insights-grid" style="grid-template-columns: repeat(3, 1fr);">
-        {% for s in top_salesmen %}
-        <div class="insight-card medal-{{ loop.index }}">
-            <div class="insight-icon">{% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% else %}🥉{% endif %}</div>
-            <div class="insight-body">
-                <div class="insight-label">#{{ loop.index }} {{ s.name }}</div>
-                <div class="insight-value mono">{{ s.total|pkr }}</div>
-                <div class="insight-date">{{ s.entries }} entr{{ 'y' if s.entries == 1 else 'ies' }}</div>
-            </div>
-        </div>
+    <div class="form-group">
+      <label for="salesman_id">Salesman</label>
+      <select id="salesman_id" name="salesman_id" class="filter-input">
+        <option value="">All Salesmen</option>
+        {% for sm in all_salesmen %}
+        <option value="{{ sm.id }}" {% if salesman_id_filter == sm.id %}selected{% endif %}>
+          {{ sm.name }}{% if not sm.is_active %} (inactive){% endif %}
+        </option>
         {% endfor %}
+      </select>
     </div>
+
+    <div class="form-group">
+      <label for="online_source">Online Source</label>
+      <select id="online_source" name="online_source" class="filter-input">
+        <option value="all" {% if online_source_filter == 'all' %}selected{% endif %}>All Sources</option>
+        {% for key, label in online_source_labels.items() %}
+        <option value="{{ key }}" {% if online_source_filter == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="category">Expense Category</label>
+      <select id="category" name="category" class="filter-input">
+        <option value="">All Categories</option>
+        {% for cat_key in valid_categories %}
+        <option value="{{ cat_key }}" {% if filter_category == cat_key %}selected{% endif %}>
+          {{ category_labels.get(cat_key, cat_key.replace('_', ' ').title()) }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Keeping Filter + Clear in a single button group means they wrap to a
+       new row together instead of Clear stranding itself under the From
+       input with no breathing room. #}
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-primary">Filter</button>
+      {% if date_from or date_to or filter_category or (online_source_filter and online_source_filter != 'all') or (salesman_id_filter and salesman_id_filter > 0) %}
+      <a href="{{ url_for('reports') }}" class="btn btn-ghost">Clear</a>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if salesman_filter_info %}
+  <div class="filter-chip-row" style="margin-top: 14px;">
+    <span class="filter-chip">
+      <strong>Salesman:</strong> {{ salesman_filter_info.name }}
+      {% if not salesman_filter_info.is_active %}<span style="color: var(--text3); margin-left: 4px;">(inactive)</span>{% endif %}
+      <a href="{{ url_for('reports', **{
+        'from': date_from,
+        'to': date_to,
+        'online_source': online_source_filter if online_source_filter != 'all' else None,
+        'category': filter_category or None,
+      }) }}" class="filter-chip-clear" title="Remove salesman filter">&times;</a>
+    </span>
+  </div>
+  {% endif %}
+
+  {# Monthly PDF picker — shares the same card so we don't burn a whole row
+     on two selects and one button. Divider + roomier spacing separates it
+     from the main filter so it reads as a related secondary action. #}
+  <div class="reports-filter-divider">
+    <div class="filter-helper" style="margin-bottom: 6px;">Download a full month as PDF</div>
+    <form method="GET" action="{{ url_for('reports_monthly_pdf') }}" class="filter-form reports-filter-form" target="_blank">
+      <div class="form-group" style="flex: 0 0 150px; min-width: 130px;">
+        <label for="pdf_month">Month</label>
+        <select id="pdf_month" name="month" class="filter-input">
+          {% set months = [(1,'January'),(2,'February'),(3,'March'),(4,'April'),(5,'May'),(6,'June'),(7,'July'),(8,'August'),(9,'September'),(10,'October'),(11,'November'),(12,'December')] %}
+          {% for num, name in months %}
+          <option value="{{ num }}" {% if num == pdf_default_month %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="flex: 0 0 120px; min-width: 110px;">
+        <label for="pdf_year">Year</label>
+        <select id="pdf_year" name="year" class="filter-input">
+          {% for y in pdf_years %}
+          <option value="{{ y }}" {% if y == pdf_default_year %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button type="submit" class="btn btn-ghost">
+          <span class="btn-icon">&#128196;</span> Download Monthly PDF
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 
-<!-- Salesman Recovery Chart -->
-<div class="card" style="margin-top: 20px; padding: 24px;">
-    <div class="section-title" style="margin-bottom: 16px; font-size: 15px;">📈 Salesman Recovery</div>
-    <div class="chart-container">
-        <canvas id="salesmanChart"></canvas>
-    </div>
+<!-- SECTION 1: Overview (6 cards, left-aligned, compact) -->
+<div class="summary-cards summary-cards-6">
+  <div class="summary-stat-card stat-compact green" title="Money collected from shopkeepers">
+    <div class="stat-label">Total Recovery</div>
+    <div class="stat-value mono" data-value="{{ total_recovery or 0 }}">{{ (total_recovery or 0)|pkr }}</div>
+  </div>
+
+  <div class="summary-stat-card stat-compact" title="Recovery received as cash (Recovery − Online)">
+    <div class="stat-label">Total Cash</div>
+    <div class="stat-value mono {% if cash_total < 0 %}negative-balance{% endif %}" data-value="{{ cash_total }}">{{ cash_total|pkr }}</div>
+  </div>
+
+  <div class="summary-stat-card stat-compact" title="Recovery received via online payment">
+    <div class="stat-label">Total Online</div>
+    <div class="stat-value mono" data-value="{{ total_online or 0 }}">{{ (total_online or 0)|pkr }}</div>
+  </div>
+
+  <div class="summary-stat-card stat-compact red" title="Business expenses only (excludes drawings and bank transfers)">
+    <div class="stat-label">Total Expense</div>
+    <div class="stat-value mono" data-value="{{ total_business_expense or 0 }}">{{ (total_business_expense or 0)|pkr }}</div>
+  </div>
+
+  <div class="summary-stat-card stat-compact" title="Cash deposited into the bank">
+    <div class="stat-label">Bank Deposit</div>
+    <div class="stat-value mono" data-value="{{ total_bank_transfer or 0 }}">{{ (total_bank_transfer or 0)|pkr }}</div>
+  </div>
+
+  <div class="summary-stat-card stat-compact {% if (profit_loss or 0) >= 0 %}green{% else %}red{% endif %}" title="Recovery − Business Expense">
+    <div class="stat-label">{% if (profit_loss or 0) >= 0 %}Profit{% else %}Loss{% endif %}</div>
+    <div class="stat-value mono {% if (profit_loss or 0) < 0 %}negative-balance{% endif %}" data-value="{{ profit_loss or 0 }}">{{ (profit_loss or 0)|pkr }}</div>
+  </div>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    if (typeof Chart === 'undefined') return;
-    var smLabels = {{ chart_salesmen_labels|tojson }} || [];
-    var smValues = {{ chart_salesmen_values|tojson }} || [];
-    if (!smLabels.length) return;
-    var canvas = document.getElementById('salesmanChart');
-    if (!canvas) return;
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    if (window.salesmanChart && typeof window.salesmanChart.destroy === "function") {
-        window.salesmanChart.destroy();
-    }
-    window.salesmanChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: smLabels,
-            datasets: [{
-                label: 'Recovery',
-                data: smValues,
-                backgroundColor: isDark ? 'rgba(48, 209, 88, 0.6)' : 'rgba(36, 138, 61, 0.65)',
-                borderColor: isDark ? '#30D158' : '#248A3D',
-                borderWidth: 1,
-                borderRadius: 6,
-                borderSkipped: false
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            indexAxis: 'y',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
-                    titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
-                    bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
-                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-                    borderWidth: 1,
-                    cornerRadius: 12,
-                    padding: 14,
-                    callbacks: {
-                        label: function (ctx) {
-                            return ' Recovery:  Rs. ' + ctx.parsed.x.toLocaleString();
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: {
-                        color: isDark ? '#6e6e73' : '#aeaeb2',
-                        font: { size: 11 },
-                        callback: function (v) { return 'Rs. ' + v.toLocaleString(); }
-                    },
-                    grid: {
-                        color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'
-                    }
-                },
-                y: {
-                    ticks: { color: isDark ? '#a1a1a6' : '#6e6e73', font: { size: 12, weight: '600' } },
-                    grid: { display: false }
-                }
-            }
-        }
-    });
-});
-</script>
-
-<!-- Salesman Performance Table -->
-<div class="card" style="margin-top: 20px;">
-    <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">👨‍💼 Salesman Performance</div>
-        <div style="font-size: 13px; color: var(--text3); font-weight: 500;">{{ salesmen|length }} salesman{{ '' if salesmen|length == 1 else 'ies' if salesmen|length != 1 }}</div>
+<!-- SECTION 2 & 3: Online and Expense breakdowns side-by-side on wide screens.
+     Both cards share the same max-height so they always align vertically; a
+     subtle inner scroll keeps the Expense list from pushing the page down. -->
+<div class="reports-breakdown-grid">
+  <!-- SECTION 2: Online Breakdown -->
+  <div class="card breakdown-card">
+    <div class="section-header" style="border-top: none; padding-top: 0; margin-bottom: 10px;">
+      <div class="section-title">Online Breakdown</div>
+      {% if total_online and total_online > 0 %}
+      <div class="mono" style="font-size: 13px; color: var(--text3); font-weight: 600;">{{ total_online|pkr }}</div>
+      {% endif %}
     </div>
-    <div style="overflow-x: auto; border-radius: 12px;">
-        <table class="entries-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Salesman</th>
-                    <th style="text-align: right;">Entries</th>
-                    <th style="text-align: right;">Total Recovery</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for s in salesmen %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td><strong>{{ s.name }}</strong></td>
-                    <td style="text-align: right;">{{ s.entries }}</td>
-                    <td style="text-align: right;">
-                        <span class="mono recovery">{{ s.total|pkr }}</span>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr style="border-top: 2px solid var(--border2);">
-                    <td colspan="3"><strong>Total</strong></td>
-                    <td style="text-align: right;">
-                        <strong class="mono recovery">{{ total_recovery|pkr }}</strong>
-                    </td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
-</div>
-{% endif %}
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    /* Fail-safe: Chart.js CDN didn't load → skip cleanly */
-    if (typeof Chart === 'undefined') {
-        console.warn('Chart.js unavailable — skipping chart render.');
-        return;
-    }
-
-    /* Server-side data */
-    var dates = {{ chart_dates|tojson }} || [];
-    var recovery = {{ chart_recovery|tojson }} || [];
-    var expense = {{ chart_expense|tojson }} || [];
-    var balance = {{ chart_balance|tojson }} || [];
-
-    if (!dates.length) return;
-
-    /* Only one day of data → show friendly message */
-    if (dates.length < 2) {
-        document.querySelectorAll('.chart-container').forEach(function (c) {
-            var canvas = c.querySelector('canvas');
-            if (canvas) canvas.style.display = 'none';
-            var skel = c.querySelector('.chart-skeleton');
-            if (skel) skel.style.display = 'none';
-            var msg = document.createElement('div');
-            msg.className = 'chart-insufficient';
-            msg.textContent = 'Not enough data for trend';
-            c.appendChild(msg);
-        });
-        return;
-    }
-
-    /* Short date labels */
-    var labels = dates.map(function (d) {
-        try {
-            var dt = new Date(d + 'T00:00:00');
-            if (isNaN(dt.getTime())) return d;
-            return dt.getDate() + ' ' + dt.toLocaleString('en', { month: 'short' });
-        } catch (e) {
-            return d;
-        }
-    });
-
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-
-    /* Theme-aware tooltip */
-    var tooltipStyle = {
-        backgroundColor: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
-        titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
-        bodyColor: isDark ? '#a1a1a6' : '#6e6e73',
-        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-        borderWidth: 1,
-        cornerRadius: 12,
-        padding: 14,
-        displayColors: true,
-        usePointStyle: true
-    };
-
-    Chart.defaults.font.family = "'Inter', 'SF Pro Display', system-ui, sans-serif";
-
-    var sharedScales = {
-        x: {
-            ticks: { color: isDark ? '#6e6e73' : '#aeaeb2', font: { size: 11, weight: '500' }, maxRotation: 45 },
-            grid: { display: false }
-        },
-        y: {
-            ticks: {
-                color: isDark ? '#6e6e73' : '#aeaeb2', font: { size: 11 },
-                callback: function (v) { return 'Rs. ' + v.toLocaleString(); }
-            },
-            grid: {
-                color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-                drawBorder: false
-            }
-        }
-    };
-
-    var sharedPlugins = {
-        legend: {
-            labels: {
-                color: isDark ? '#a1a1a6' : '#6e6e73', font: { size: 13, weight: '600' },
-                usePointStyle: true, pointStyle: 'circle', padding: 20
-            }
-        },
-        tooltip: Object.assign({}, tooltipStyle, {
-            callbacks: {
-                label: function (ctx) {
-                    return ' ' + ctx.dataset.label + ':  Rs. ' + ctx.parsed.y.toLocaleString();
-                }
-            }
-        })
-    };
-
-    var sharedOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        animation: { duration: 700, easing: 'easeOutCubic' },
-        scales: sharedScales,
-        plugins: sharedPlugins
-    };
-
-    /* --- Daily Cash Flow Line Chart (running closing balance) --- */
-    try {
-        var cashCanvas = document.getElementById('cashFlowChart');
-        if (cashCanvas) {
-            if (window.cashFlowChart && typeof window.cashFlowChart.destroy === "function") {
-                window.cashFlowChart.destroy();
-            }
-
-            var pCtx = cashCanvas.getContext('2d');
-            var balanceGrad = pCtx.createLinearGradient(0, 0, 0, 320);
-            balanceGrad.addColorStop(0, isDark ? 'rgba(10, 132, 255, 0.25)' : 'rgba(0, 122, 255, 0.12)');
-            balanceGrad.addColorStop(1, 'rgba(10, 132, 255, 0)');
-
-            window.cashFlowChart = new Chart(cashCanvas, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Closing Balance',
-                        data: balance,
-                        borderColor: isDark ? '#0A84FF' : '#007AFF',
-                        backgroundColor: balanceGrad,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 4,
-                        pointHoverRadius: 7,
-                        pointBackgroundColor: isDark ? '#0A84FF' : '#007AFF',
-                        pointBorderColor: isDark ? '#1c1c1e' : '#fff',
-                        pointBorderWidth: 2,
-                        borderWidth: 2.5
-                    }]
-                },
-                options: sharedOptions
-            });
-        }
-    } catch (err) {
-        console.error('Cash flow chart failed to render:', err);
-    }
-
-    /* --- Recovery vs Expense Bar Chart --- */
-    try {
-        var barCanvas = document.getElementById('barChart');
-        if (barCanvas) {
-            if (window.barChart && typeof window.barChart.destroy === "function") {
-                window.barChart.destroy();
-            }
-            window.barChart = new Chart(barCanvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Recovery',
-                            data: recovery,
-                            backgroundColor: isDark ? 'rgba(48, 209, 88, 0.6)' : 'rgba(36, 138, 61, 0.65)',
-                            borderColor: isDark ? '#30D158' : '#248A3D',
-                            borderWidth: 1,
-                            borderRadius: 6,
-                            borderSkipped: false
-                        },
-                        {
-                            label: 'Expenses',
-                            data: expense,
-                            backgroundColor: isDark ? 'rgba(255, 69, 58, 0.6)' : 'rgba(215, 0, 21, 0.55)',
-                            borderColor: isDark ? '#FF453A' : '#D70015',
-                            borderWidth: 1,
-                            borderRadius: 6,
-                            borderSkipped: false
-                        }
-                    ]
-                },
-                options: sharedOptions
-            });
-        }
-    } catch (err) {
-        console.error('Bar chart failed to render:', err);
-    }
-
-    /* Remove skeleton placeholders */
-    setTimeout(function () {
-        document.querySelectorAll('.chart-skeleton').forEach(function (s) {
-            s.style.display = 'none';
-        });
-    }, 500);
-});
-</script>
-{% endif %}
-
-<script>
-/* Count-up animation for summary + insight values. */
-document.addEventListener('DOMContentLoaded', function () {
-    function formatLakhCrore(n) {
-        var neg = n < 0;
-        n = Math.abs(n);
-        var s = String(n);
-        if (s.length <= 3) return (neg ? '-' : '') + s;
-        var last3 = s.slice(-3);
-        var rest = s.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
-        return (neg ? '-' : '') + rest + ',' + last3;
-    }
-
-    function animateValue(el, end, duration) {
-        duration = duration || 800;
-        var original = el.textContent;
-        var m = original.match(/^(\D*)/);
-        var prefix = m ? m[1] : '';
-        var start = 0;
-        var startTime = null;
-
-        function step(ts) {
-            if (!startTime) startTime = ts;
-            var progress = Math.min((ts - startTime) / duration, 1);
-            var eased = 1 - Math.pow(1 - progress, 3);
-            var value = Math.round(eased * (end - start) + start);
-            el.textContent = prefix + formatLakhCrore(value);
-            if (progress < 1) {
-                requestAnimationFrame(step);
-            } else {
-                /* Split into muted prefix + bold amount */
-                var parts = original.match(/^(\D*)(.*)$/);
-                if (parts && parts[1].trim() && parts[2]) {
-                    el.innerHTML =
-                        '<span class="currency-prefix">' + parts[1].trim() + '</span>' +
-                        '<span class="currency-amount">' + parts[2] + '</span>';
-                } else {
-                    el.textContent = original;
-                }
-            }
-        }
-        requestAnimationFrame(step);
-    }
-
-    document.querySelectorAll('[data-value]').forEach(function (el, index) {
-        var raw = parseInt(el.getAttribute('data-value'), 10);
-        if (isNaN(raw)) return;
-        setTimeout(function () {
-            animateValue(el, raw, 800);
-        }, index * 100);
-    });
-});
-</script>
-
-<!-- Daily Summary Table -->
-<div class="card" style="margin-top: 24px;">
-    <div class="section-header" style="border-top: none; padding-top: 0;">
-        <div class="section-title">📋 Daily Breakdown</div>
-        <div style="font-size: 13px; color: var(--text3); font-weight: 500;">{{ daily_data|length }} day{{ 's' if daily_data|length != 1 }}</div>
-    </div>
-
-    {% if daily_data %}
-    <div style="overflow-x: auto; border-radius: 12px;">
-    <table class="entries-table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th style="text-align: right;">Recovery</th>
-                <th style="text-align: right;">Expenses</th>
-                <th style="text-align: right;">Closing Balance</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for day in daily_data %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('daily', date=day.date) }}" class="monthly-link">
-                        {{ day.date|monthday }}
-                    </a>
-                </td>
-                <td style="text-align: right;">
-                    <span class="mono recovery">{{ day.recovery|pkr }}</span>
-                </td>
-                <td style="text-align: right;">
-                    <span class="mono expense">{{ day.expense|pkr }}</span>
-                </td>
-                <td style="text-align: right;">
-                    <span class="mono {% if day.balance >= 0 %}recovery{% else %}negative{% endif %}">
-                        {{ day.balance|pkr }}
-                    </span>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr style="border-top: 2px solid var(--border2);">
-                <td><strong>Total</strong></td>
-                <td style="text-align: right;">
-                    <strong class="mono recovery">{{ total_recovery|pkr }}</strong>
-                </td>
-                <td style="text-align: right;">
-                    <strong class="mono expense">{{ total_expense|pkr }}</strong>
-                </td>
-                <td style="text-align: right;">
-                    <strong class="mono {% if closing_balance >= 0 %}recovery{% else %}negative{% endif %}">
-                        {{ closing_balance|pkr }}
-                    </strong>
-                </td>
-            </tr>
-        </tfoot>
-    </table>
+    {% if total_online and total_online > 0 %}
+    {# Online rows are plain divs — source filtering is available via the
+       "Online Source" dropdown in the filter bar, so per-row clicks are
+       redundant. Matches the non-clickable Expense Breakdown behaviour. #}
+    <div class="rep-scroll">
+      {% for key, label in online_source_labels.items() %}
+        {% set amt = online_source_breakdown.get(key, 0) or 0 %}
+        {% if amt > 0 %}
+        {% set pct = (amt * 100 / total_online) if total_online > 0 else 0 %}
+        <div class="rep-row">
+          <span class="rep-label">{{ label }}</span>
+          <span class="rep-amount">{{ amt|pkr }}<span class="rep-meta">({{ '%.1f'|format(pct) }}%)</span></span>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ pct }}%;"></div></div>
+        </div>
+        {% endif %}
+      {% endfor %}
     </div>
     {% else %}
-    <div class="empty-msg">
-        <span class="empty-icon">&#128202;</span>
-        <div class="empty-text">No entries found for the selected period.</div>
-    </div>
+    <div class="empty-msg"><div class="empty-text">No online entries in this period.</div></div>
     {% endif %}
+  </div>
+
+  <!-- SECTION 3: Expense Breakdown.
+       Bank Slip is shown here as an informational row per user request, but it
+       is NOT part of total_expense (business rule 4: bank slips are transfers,
+       not expenses). The header total therefore stays on business expenses,
+       while the Bank Slip row is tagged "Transfer" and uses a blue bar so it's
+       visually obvious it's separate from the red expense rows. -->
+  <div class="card breakdown-card">
+    <div class="section-header" style="border-top: none; padding-top: 0; margin-bottom: 10px;">
+      <div>
+        <div class="section-title">Expense Breakdown</div>
+        {% set bs_row = namespace(amt=0) %}
+        {% for c in category_totals %}{% if c.is_transfer %}{% set bs_row.amt = c.amount %}{% endif %}{% endfor %}
+        {% if bs_row.amt > 0 %}
+        <div style="font-size: 12px; color: var(--text3); margin-top: 2px;">
+          Bank Slip ({{ bs_row.amt|pkr }}) shown below as transfer — not counted in expense total.
+        </div>
+        {% endif %}
+      </div>
+      {% if total_expense and total_expense > 0 %}
+      <div class="mono amt-expense" style="font-size: 13px; font-weight: 600;">{{ total_expense|pkr }}</div>
+      {% endif %}
+    </div>
+    {% if category_totals %}
+      {% set exp_total = namespace(v=0) %}
+      {% for cat in category_totals %}{% set exp_total.v = exp_total.v + (cat.amount or 0) %}{% endfor %}
+    {# Expense rows are intentionally NOT clickable — the list scrolls, and
+       category filtering is already available via the dropdown in the filter
+       bar. Keeping rows as plain divs avoids accidental navigation while
+       scrolling through 20+ categories. #}
+    <div class="rep-scroll">
+      {% for cat in category_totals %}
+        {% set pct = (cat.amount * 100 / exp_total.v) if exp_total.v > 0 else 0 %}
+        <div class="rep-row cat-row cat-{{ cat.key }}{% if cat.is_transfer %} cat-row-transfer{% endif %}">
+          <span class="rep-label">
+            <span class="cat-dot"></span>
+            {{ cat.name }}
+            {% if cat.is_transfer %}<span class="transfer-tag">Transfer</span>{% endif %}
+          </span>
+          <span class="rep-amount">{{ cat.amount|pkr }}<span class="rep-meta">({{ '%.1f'|format(pct) }}%)</span></span>
+          <div class="bar-track"><div class="bar-fill {% if cat.is_transfer %}blue{% else %}red{% endif %}" style="width: {{ pct }}%;"></div></div>
+        </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-msg"><div class="empty-text">No expenses in this period.</div></div>
+    {% endif %}
+  </div>
 </div>
+
+<!-- SECTION 3B: Salesman Performance. Whole row is clickable — navigates to
+     /reports with the salesman filter pre-applied in the same window. The
+     currently-filtered salesman row is rendered as a non-link so it can't
+     self-link. -->
+<div class="card breakdown-card breakdown-card-wide" style="margin-top: 20px;">
+  <div class="section-header" style="border-top: none; padding-top: 0; margin-bottom: 10px;">
+    <div>
+      <div class="section-title">Salesman Performance</div>
+      <div style="font-size: 12px; color: var(--text3); margin-top: 2px;">
+        Recovery collected per salesman in this period{% if salesmen %} — click a row to filter{% endif %}
+      </div>
+    </div>
+    {% if total_recovery and total_recovery > 0 and not salesman_filter_info %}
+    <div class="mono recovery" style="font-size: 13px; font-weight: 600;">{{ total_recovery|pkr }}</div>
+    {% endif %}
+  </div>
+
+  {% if salesmen %}
+    {% set sm_total = namespace(v=0) %}
+    {% for sm in salesmen %}{% set sm_total.v = sm_total.v + (sm.total or 0) %}{% endfor %}
+    <div class="rep-scroll">
+    {% for sm in salesmen %}
+      {% set pct = (sm.total * 100 / sm_total.v) if sm_total.v > 0 else 0 %}
+      {% set is_active_filter = salesman_id_filter and sm.id == salesman_id_filter %}
+      {% if sm.id and not is_active_filter %}
+      <a class="rep-row rep-row-link"
+         href="{{ url_for('reports', **{
+           'from': date_from,
+           'to': date_to,
+           'salesman_id': sm.id,
+           'online_source': online_source_filter if online_source_filter != 'all' else None,
+           'category': filter_category or None,
+         }) }}"
+         title="Filter reports by {{ sm.name }}">
+      {% else %}
+      <div class="rep-row {% if is_active_filter %}rep-row-active{% endif %}">
+      {% endif %}
+        <span class="rep-label">
+          <span class="salesman-avatar">{{ (sm.name[:1] if sm.name else '?')|upper }}</span>
+          <span>
+            {{ sm.name }}
+            {% if not sm.is_active %}<span style="color: var(--text3); font-size: 11px;">(inactive)</span>{% endif %}
+            <span style="display: block; font-size: 11px; color: var(--text3); font-weight: 500; margin-top: 2px;">
+              {{ sm.entries }} entr{{ 'y' if sm.entries == 1 else 'ies' }}
+            </span>
+          </span>
+        </span>
+        <span class="rep-amount recovery">
+          {{ sm.total|pkr }}<span class="rep-meta">({{ '%.1f'|format(pct) }}%)</span>
+        </span>
+        <div class="bar-track"><div class="bar-fill green" style="width: {{ pct }}%;"></div></div>
+      {% if sm.id and not is_active_filter %}
+      </a>
+      {% else %}
+      </div>
+      {% endif %}
+    {% endfor %}
+    </div>
+  {% else %}
+  <div class="empty-msg"><div class="empty-text">No salesman recovery entries in this period.</div></div>
+  {% endif %}
+</div>
+
+<!-- SECTION 4: Daily Breakdown Table -->
+<div class="card" style="margin-top: 20px; margin-bottom: 24px;">
+  <div class="section-header" style="border-top: none; padding-top: 0;">
+    <div>
+      <div class="section-title">Daily Breakdown</div>
+      {% if salesman_filter_info %}
+      <div style="font-size: 12px; color: var(--text3); margin-top: 2px;">
+        Recovery column shows only <strong>{{ salesman_filter_info.name }}</strong>'s collections.
+        Other columns remain business-wide.
+      </div>
+      {% endif %}
+    </div>
+    <div style="font-size: 13px; color: var(--text3); font-weight: 500;">
+      {{ daily_data|length }} day{{ 's' if daily_data|length != 1 }}
+    </div>
+  </div>
+
+  {% if daily_data %}
+  <div style="overflow-x: auto; border-radius: 12px;">
+    <table class="entries-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th style="text-align: right;">Recovery</th>
+          <th style="text-align: right;">Online</th>
+          <th style="text-align: right;">Cash</th>
+          <th style="text-align: right;">Expense</th>
+          <th style="text-align: right;">Bank</th>
+          <th style="text-align: right;">Closing</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in daily_data %}
+        <tr>
+          <td>
+            <a href="{{ url_for('daily', date=day.date) }}" class="monthly-link">{{ day.date|monthday }}</a>
+          </td>
+          <td style="text-align: right;"><span class="mono recovery">{{ (day.recovery or 0)|pkr }}</span></td>
+          <td style="text-align: right;"><span class="mono">{{ (day.online or 0)|pkr }}</span></td>
+          <td style="text-align: right;">
+            <span class="mono {% if (day.cash_recovery or 0) < 0 %}negative{% else %}recovery{% endif %}">{{ (day.cash_recovery or 0)|pkr }}</span>
+          </td>
+          <td style="text-align: right;"><span class="mono expense">{{ (day.expense or 0)|pkr }}</span></td>
+          <td style="text-align: right;"><span class="mono">{{ (day.bank_transfer or 0)|pkr }}</span></td>
+          <td style="text-align: right;">
+            <span class="mono {% if (day.balance or 0) >= 0 %}recovery{% else %}negative{% endif %}">{{ (day.balance or 0)|pkr }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="border-top: 2px solid var(--border2);">
+          <td><strong>Total</strong></td>
+          <td style="text-align: right;"><strong class="mono recovery">{{ (total_recovery or 0)|pkr }}</strong></td>
+          <td style="text-align: right;"><strong class="mono">{{ (total_online or 0)|pkr }}</strong></td>
+          <td style="text-align: right;">
+            <strong class="mono {% if cash_total < 0 %}negative{% else %}recovery{% endif %}">{{ cash_total|pkr }}</strong>
+          </td>
+          <td style="text-align: right;"><strong class="mono expense">{{ (total_expense or 0)|pkr }}</strong></td>
+          <td style="text-align: right;"><strong class="mono">{{ (total_bank_transfer or 0)|pkr }}</strong></td>
+          <td style="text-align: right;">
+            <strong class="mono {% if (closing_balance or 0) >= 0 %}recovery{% else %}negative{% endif %}">{{ (closing_balance or 0)|pkr }}</strong>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-msg">
+    <span class="empty-icon">&#128202;</span>
+    <div class="empty-text">No entries found for the selected period.</div>
+  </div>
+  {% endif %}
+</div>
+
+{# Count-up animation for money values. Minimal, no external libs. #}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    function formatLakhCrore(n) {
+      var neg = n < 0;
+      n = Math.abs(n);
+      var s = String(n);
+      if (s.length <= 3) return (neg ? '-' : '') + s;
+      var last3 = s.slice(-3);
+      var rest = s.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+      return (neg ? '-' : '') + rest + ',' + last3;
+    }
+    function animateValue(el, end, duration) {
+      duration = duration || 700;
+      var original = el.textContent;
+      var m = original.match(/^(\D*)/);
+      var prefix = m ? m[1] : '';
+      var startTime = null;
+      function step(ts) {
+        if (!startTime) startTime = ts;
+        var progress = Math.min((ts - startTime) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        var value = Math.round(eased * end);
+        el.textContent = prefix + formatLakhCrore(value);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          el.textContent = original;
+        }
+      }
+      requestAnimationFrame(step);
+    }
+    document.querySelectorAll('[data-value]').forEach(function (el, index) {
+      var raw = parseInt(el.getAttribute('data-value'), 10);
+      if (isNaN(raw)) return;
+      setTimeout(function () { animateValue(el, raw, 700); }, index * 60);
+    });
+  });
+</script>
+
 {% endblock %}

@@ -1,0 +1,4 @@
+# Jinja2 templates — Prettier's HTML formatter mangles `{% if x == y %}` style
+# conditionals inside tags, producing TemplateSyntaxError at runtime.
+# Keep Prettier out of this directory.
+app/templates/**

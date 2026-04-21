@@ -79,6 +79,16 @@ def setup_database():
             ALTER TABLE daily_entries ADD COLUMN category TEXT DEFAULT 'other'
         ''')
         print('Added column: category')
+    if 'online_source' not in existing_columns:
+        cursor.execute('''
+            ALTER TABLE daily_entries ADD COLUMN online_source TEXT
+        ''')
+        print('Added column: online_source')
+    if 'bank_name' not in existing_columns:
+        cursor.execute('''
+            ALTER TABLE daily_entries ADD COLUMN bank_name TEXT
+        ''')
+        print('Added column: bank_name')
 
     # ---- Indexes for fast queries ----
     cursor.execute('''

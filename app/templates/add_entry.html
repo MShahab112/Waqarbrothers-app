@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Add {{ 'Recovery' if entry_type == 'recovery' else 'Expense' }} — Waqar &amp; Brothers{% endblock %}
+{% block title %}Add {{ 'Recovery' if entry_type == 'recovery' else ('Online' if entry_type == 'online' else 'Expense') }} — Waqar &amp; Brothers{% endblock %}
 
 {% block content %}
 <div class="form-box">
-    <h1>{% if entry_type == 'recovery' %}<span style="color: var(--green);">&#9679;</span>{% else %}<span style="color: var(--red);">&#9679;</span>{% endif %} Add {{ 'Recovery' if entry_type == 'recovery' else 'Expense' }} Entry</h1>
+    <h1>{% if entry_type == 'recovery' %}<span style="color: var(--green);">&#9679;</span>{% elif entry_type == 'online' %}<span style="color: var(--brand);">&#9679;</span>{% else %}<span style="color: var(--red);">&#9679;</span>{% endif %} Add {{ 'Recovery' if entry_type == 'recovery' else ('Online' if entry_type == 'online' else 'Expense') }} Entry</h1>
 
     <form method="POST" action="{{ url_for('add_entry') }}">
         <!-- Hidden field for entry type -->
@@ -14,17 +14,78 @@
             <input type="date" id="date" name="date" value="{{ entry_date }}" required>
         </div>
 
+        {% if entry_type == 'expense' %}
         <div class="form-group">
+            <label for="category">Category</label>
+            <select id="category" name="category" required>
+                <option value="" selected disabled>Select a category…</option>
+                {% for key in valid_categories %}
+                <option value="{{ key }}">{{ categories[key] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        {% if entry_type == 'online' %}
+        <div class="form-group">
+            <label for="online_source">Source</label>
+            <select id="online_source" name="online_source" required>
+                <option value="" selected disabled>Select source…</option>
+                {% for key, label in online_sources.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" id="online_bank_group" style="display:none;">
+            <label for="bank_name">Bank Name</label>
+            <input type="text" id="bank_name" name="bank_name" placeholder="e.g. MCB">
+        </div>
+        {% endif %}
+
+        <div class="form-group {% if entry_type == 'expense' %}suggestions-wrap{% endif %}">
             {% if entry_type == 'recovery' %}
             <label for="description">Salesman Name</label>
             <input type="text" id="description" name="description" required
                    autofocus placeholder="e.g. Khalid">
-            {% else %}
-            <label for="description">Description</label>
+            {% elif entry_type == 'expense' %}
+            <label for="description" id="description_label">Name / Purpose</label>
             <input type="text" id="description" name="description" required
-                   autofocus placeholder="e.g. Food / Tea">
+                   autofocus placeholder="Enter name (e.g., Petrol, Waqar, Challan)"
+                   autocomplete="off" data-suggest="expense">
+            <div class="suggestions-list" id="expenseSuggestions" style="display:none;"></div>
+            <small class="text-muted" id="description_help" style="display:block; margin-top:6px; color:var(--text3);">
+                This is your custom tracking name (e.g., Petrol, Labour, Waqar)
+            </small>
+            {% else %}
+            <label for="description">Reference (optional)</label>
+            <input type="text" id="description" name="description"
+                   autofocus placeholder="Optional reference text">
             {% endif %}
         </div>
+
+        {% if entry_type == 'expense' %}
+        <script>
+        (function() {
+            var sel = document.getElementById('category');
+            var label = document.getElementById('description_label');
+            var input = document.getElementById('description');
+            var help = document.getElementById('description_help');
+            if (!sel || !label || !input) return;
+            function sync() {
+                if (sel.value === 'advance') {
+                    label.textContent = 'Person Name';
+                    input.placeholder = 'e.g. Amanullah';
+                    if (help) help.style.display = 'none';
+                } else {
+                    label.textContent = 'Name / Purpose';
+                    input.placeholder = 'Enter name (e.g., Petrol, Waqar, Challan)';
+                    if (help) help.style.display = 'block';
+                }
+            }
+            sel.addEventListener('change', sync);
+            sync();
+        })();
+        </script>
+        {% endif %}
 
         <div class="form-group">
             <label for="amount">Amount (PKR)</label>
@@ -44,4 +105,137 @@
         </div>
     </form>
 </div>
+
+{% if entry_type == 'expense' %}
+<script>
+// ============================================================
+// SUGGESTIONS ENGINE (localStorage + API backed)
+// ============================================================
+var SuggestEngine = {
+    _key: function(type) { return 'wb_recent_' + type; },
+
+    save: function(type, value) {
+        if (!value || !value.trim()) return;
+        value = value.trim();
+        var key = this._key(type);
+        var list = JSON.parse(localStorage.getItem(key) || '[]');
+        list = list.filter(function(v) { return v.toLowerCase() !== value.toLowerCase(); });
+        list.unshift(value);
+        if (list.length > 20) list = list.slice(0, 20);
+        localStorage.setItem(key, JSON.stringify(list));
+    },
+
+    get: function(type, query, callback) {
+        var localList = JSON.parse(localStorage.getItem(this._key(type)) || '[]');
+        var q = (query || '').toLowerCase();
+        var filteredLocal = localList.filter(function(v) { return v.toLowerCase().indexOf(q) !== -1; }).slice(0, 6);
+
+        if (type === 'expense' && callback) {
+             fetch('{{ url_for("api_descriptions") }}')
+                .then(function(r) { return r.ok ? r.json() : []; })
+                .then(function(globalList) {
+                    var filteredGlobal = globalList.filter(function(v) {
+                        return v.toLowerCase().indexOf(q) !== -1 && 
+                               !filteredLocal.some(function(l){ return l.toLowerCase() === v.toLowerCase(); });
+                    }).slice(0, 8);
+                    callback(filteredLocal.concat(filteredGlobal).slice(0, 10));
+                })
+                .catch(function() { callback(filteredLocal); });
+        } else if (callback) {
+            callback(filteredLocal);
+        } else {
+            return filteredLocal;
+        }
+    }
+};
+
+document.querySelectorAll('[data-suggest]').forEach(function(input) {
+    var type = input.getAttribute('data-suggest');
+    var listEl = input.parentElement.querySelector('.suggestions-list');
+    if (!listEl) return;
+
+    var activeIdx = -1;
+
+    function render(items) {
+        if (!items.length) { listEl.style.display = 'none'; return; }
+        listEl.innerHTML = '';
+        items.forEach(function(val, i) {
+            var div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = val;
+            div.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                input.value = val;
+                listEl.style.display = 'none';
+                var amountField = input.closest('form').querySelector('.amount-input');
+                if (amountField) amountField.focus();
+            });
+            listEl.appendChild(div);
+        });
+        listEl.style.display = 'block';
+        activeIdx = -1;
+    }
+
+    function update() {
+        SuggestEngine.get(type, input.value, function(items) {
+            render(items);
+        });
+    }
+
+    input.addEventListener('focus', update);
+    input.addEventListener('input', update);
+    input.addEventListener('blur', function() {
+        setTimeout(function() { listEl.style.display = 'none'; }, 150);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        var items = listEl.querySelectorAll('.suggestion-item');
+        if (!items.length || listEl.style.display === 'none') return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, items.length - 1);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, 0);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            var pickIdx = activeIdx >= 0 ? activeIdx : 0;
+            input.value = items[pickIdx].textContent;
+            listEl.style.display = 'none';
+            var amountField = input.closest('form').querySelector('.amount-input');
+            if (amountField) amountField.focus();
+        }
+    });
+});
+
+// Save to SuggestEngine on submit
+document.querySelector('form').addEventListener('submit', function() {
+    var descInput = document.getElementById('description');
+    if (descInput && descInput.value) {
+        SuggestEngine.save('expense', descInput.value.trim());
+    }
+});
+</script>
+{% endif %}
+{% if entry_type == 'online' %}
+<script>
+(function() {
+    var src = document.getElementById('online_source');
+    var grp = document.getElementById('online_bank_group');
+    var bank = document.getElementById('bank_name');
+    if (!src || !grp || !bank) return;
+    function sync() {
+        var show = src.value === 'bank_transfer';
+        grp.style.display = show ? 'block' : 'none';
+        bank.required = show;
+        if (!show) bank.value = '';
+    }
+    src.addEventListener('change', sync);
+    sync();
+})();
+</script>
+{% endif %}
 {% endblock %}

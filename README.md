@@ -45,7 +45,12 @@ A simple and powerful desktop application to manage daily recovery and expenses 
 
 ## 💾 Data Location
 
-All data is stored locally on your system.
+All data is stored locally on your system:
+
+* Database: `C:\WaqarBrothers\data\accounts.db`
+* Logs:     `C:\WaqarBrothers\logs\app.log` (rotates at 5 MB, keeps 3 backups)
+* Backups:  `C:\WaqarBrothers\backups\`
+* Receipts: `C:\WaqarBrothers\app\uploads\` (dev) / `C:\WaqarBrothers\uploads\` (installed)
 
 ⚠️ Do not delete database files manually.
 

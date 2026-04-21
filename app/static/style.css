@@ -8,42 +8,48 @@
 /* Dark Theme (Default) — Deep, rich Apple-inspired palette */
 [data-theme="dark"] {
   --bg: #000000;
-  --bg-gradient: linear-gradient(180deg, #000000 0%, #0C0C0E 50%, #000000 100%);
+  --bg-gradient: linear-gradient(180deg, #000000 0%, #0c0c0e 50%, #000000 100%);
   --surface: rgba(28, 28, 30, 0.8);
   --surface2: rgba(44, 44, 46, 0.6);
   --surface-glass: rgba(28, 28, 30, 0.72);
   --surface-elevated: rgba(44, 44, 46, 0.9);
   --border: rgba(255, 255, 255, 0.06);
   --border2: rgba(255, 255, 255, 0.1);
-  --text: #F5F5F7;
-  --text2: #A1A1A6;
-  --text3: #6E6E73;
-  --green: #30D158;
-  --green-soft: #28B84C;
+  --text: #f5f5f7;
+  --text2: #a1a1a6;
+  --text3: #6e6e73;
+  --green: #30d158;
+  --green-soft: #28b84c;
   --green-bg: rgba(48, 209, 88, 0.12);
   --green-glow: rgba(48, 209, 88, 0.2);
-  --red: #FF453A;
-  --red-soft: #E03E34;
+  --red: #ff453a;
+  --red-soft: #e03e34;
   --red-bg: rgba(255, 69, 58, 0.12);
   --red-glow: rgba(255, 69, 58, 0.2);
-  --blue: #0A84FF;
+  --blue: #0a84ff;
   --blue-bg: rgba(10, 132, 255, 0.12);
   --blue-glow: rgba(10, 132, 255, 0.2);
-  --accent: #0A84FF;
-  --accent2: #5E5CE6;
-  --accent-bg: rgba(10, 132, 255, 0.1);
-  --accent-glow: rgba(10, 132, 255, 0.2);
-  --shadow: 0 0 0 0.5px rgba(255,255,255,0.04), 0 2px 8px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.2);
-  --shadow-hover: 0 0 0 0.5px rgba(255,255,255,0.06), 0 4px 16px rgba(0,0,0,0.4), 0 12px 40px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 0 0 0.5px rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.5), 0 24px 60px rgba(0,0,0,0.4);
+  --accent: #0071e3;
+  --accent2: #5e5ce6;
+  --accent-bg: rgba(0, 113, 227, 0.12);
+  --accent-glow: rgba(0, 113, 227, 0.2);
+  --shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.2);
+  --shadow-hover:
+    0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 4px 16px rgba(0, 0, 0, 0.4),
+    0 12px 40px rgba(0, 0, 0, 0.3);
+  --shadow-elevated:
+    0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 8px 32px rgba(0, 0, 0, 0.5),
+    0 24px 60px rgba(0, 0, 0, 0.4);
   --card-bg: rgba(28, 28, 30, 0.72);
-  --warning-color: #FFD60A;
+  --warning-color: #ffd60a;
   --warning-bg: rgba(255, 214, 10, 0.1);
   --warning-border: rgba(255, 214, 10, 0.2);
-  --gradient-brand: linear-gradient(135deg, #0A84FF, #5E5CE6);
-  --gradient-green: linear-gradient(135deg, #30D158, #0A84FF);
-  --gradient-red: linear-gradient(135deg, #FF453A, #FF9F0A);
-  --gradient-blue: linear-gradient(135deg, #0A84FF, #5E5CE6);
+  --gradient-brand: linear-gradient(135deg, #0a84ff, #5e5ce6);
+  --gradient-green: linear-gradient(135deg, #30d158, #0a84ff);
+  --gradient-red: linear-gradient(135deg, #ff453a, #ff9f0a);
+  --gradient-blue: linear-gradient(135deg, #0a84ff, #5e5ce6);
   --modal-bg: rgba(0, 0, 0, 0.7);
   --closing-glow: rgba(10, 132, 255, 0.15);
   --table-row-alt: rgba(255, 255, 255, 0.02);
@@ -51,43 +57,49 @@
 
 /* Light Theme — Clean Apple-style */
 [data-theme="light"] {
-  --bg: #F2F2F7;
-  --bg-gradient: linear-gradient(180deg, #F2F2F7 0%, #EFEFF4 50%, #F2F2F7 100%);
+  --bg: #f2f2f7;
+  --bg-gradient: linear-gradient(180deg, #f2f2f7 0%, #efeff4 50%, #f2f2f7 100%);
   --surface: rgba(255, 255, 255, 0.9);
   --surface2: rgba(242, 242, 247, 0.8);
   --surface-glass: rgba(255, 255, 255, 0.78);
   --surface-elevated: rgba(255, 255, 255, 0.95);
   --border: rgba(0, 0, 0, 0.04);
   --border2: rgba(0, 0, 0, 0.08);
-  --text: #1D1D1F;
-  --text2: #6E6E73;
-  --text3: #AEAEB2;
-  --green: #248A3D;
-  --green-soft: #1E7A35;
+  --text: #1d1d1f;
+  --text2: #6e6e73;
+  --text3: #aeaeb2;
+  --green: #248a3d;
+  --green-soft: #1e7a35;
   --green-bg: rgba(36, 138, 61, 0.08);
   --green-glow: rgba(36, 138, 61, 0.12);
-  --red: #D70015;
-  --red-soft: #C0001A;
+  --red: #d70015;
+  --red-soft: #c0001a;
   --red-bg: rgba(215, 0, 21, 0.08);
   --red-glow: rgba(215, 0, 21, 0.12);
-  --blue: #007AFF;
+  --blue: #007aff;
   --blue-bg: rgba(0, 122, 255, 0.08);
   --blue-glow: rgba(0, 122, 255, 0.12);
-  --accent: #007AFF;
-  --accent2: #5856D6;
-  --accent-bg: rgba(0, 122, 255, 0.06);
-  --accent-glow: rgba(0, 122, 255, 0.12);
-  --shadow: 0 0 0 0.5px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
-  --shadow-hover: 0 0 0 0.5px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.06);
-  --shadow-elevated: 0 0 0 0.5px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.08), 0 20px 48px rgba(0,0,0,0.06);
+  --accent: #0071e3;
+  --accent2: #5856d6;
+  --accent-bg: rgba(0, 113, 227, 0.08);
+  --accent-glow: rgba(0, 113, 227, 0.14);
+  --shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 16px rgba(0, 0, 0, 0.03);
+  --shadow-hover:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.06);
+  --shadow-elevated:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08),
+    0 20px 48px rgba(0, 0, 0, 0.06);
   --card-bg: rgba(255, 255, 255, 0.85);
-  --warning-color: #B25000;
+  --warning-color: #b25000;
   --warning-bg: rgba(178, 80, 0, 0.08);
   --warning-border: rgba(178, 80, 0, 0.15);
-  --gradient-brand: linear-gradient(135deg, #007AFF, #5856D6);
-  --gradient-green: linear-gradient(135deg, #248A3D, #007AFF);
-  --gradient-red: linear-gradient(135deg, #D70015, #FF9500);
-  --gradient-blue: linear-gradient(135deg, #007AFF, #5856D6);
+  --gradient-brand: linear-gradient(135deg, #007aff, #5856d6);
+  --gradient-green: linear-gradient(135deg, #248a3d, #007aff);
+  --gradient-red: linear-gradient(135deg, #d70015, #ff9500);
+  --gradient-blue: linear-gradient(135deg, #007aff, #5856d6);
   --modal-bg: rgba(0, 0, 0, 0.3);
   --closing-glow: rgba(0, 122, 255, 0.08);
   --table-row-alt: rgba(0, 0, 0, 0.015);
@@ -108,20 +120,31 @@ body {
   background-image: var(--bg-gradient);
   background-attachment: fixed;
   color: var(--text);
-  font-family: "SF Pro Display", "SF Pro Text", "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    "SF Pro Display",
+    "SF Pro Text",
+    "Inter",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   font-size: 15px;
   line-height: 1.6;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: 'kern' 1, 'liga' 1;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1;
 }
 
 a {
   color: var(--accent);
   text-decoration: none;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 
 a:hover {
@@ -135,7 +158,9 @@ a:hover {
 
 /* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -158,8 +183,12 @@ a:hover {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideInRight {
@@ -174,13 +203,22 @@ a:hover {
 }
 
 @keyframes subtlePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* Page-level fade in */
@@ -203,6 +241,19 @@ a:hover {
   transition:
     box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
     background 0.3s ease;
+}
+
+/* Subtle section separation — tints Recovery/Expense cards without
+   touching the template. Falls back to default .card on empty days
+   (no .entry-dot present). Harmless in browsers that do not support
+   :has() — supported by all Chromium/Edge/Safari/Firefox shipped
+   since early 2024. */
+.card:has(.entry-dot.recovery) {
+  background: linear-gradient(180deg, var(--green-bg) 0%, var(--surface-glass) 40%);
+}
+
+.card:has(.entry-dot.expense) {
+  background: linear-gradient(180deg, var(--red-bg) 0%, var(--surface-glass) 40%);
 }
 
 .card:hover {
@@ -364,10 +415,18 @@ a:hover {
   transform: scale(0.95);
 }
 
-[data-theme="dark"] .icon-sun { display: none; }
-[data-theme="dark"] .icon-moon { display: inline; }
-[data-theme="light"] .icon-sun { display: inline; }
-[data-theme="light"] .icon-moon { display: none; }
+[data-theme="dark"] .icon-sun {
+  display: none;
+}
+[data-theme="dark"] .icon-moon {
+  display: inline;
+}
+[data-theme="light"] .icon-sun {
+  display: inline;
+}
+[data-theme="light"] .icon-moon {
+  display: none;
+}
 
 /* ============================================================
    FLASH / ALERT MESSAGES
@@ -440,7 +499,9 @@ a:hover {
   line-height: 1.5;
   min-height: 0;
 }
-.update-result:empty { padding: 0; }
+.update-result:empty {
+  padding: 0;
+}
 .update-result-ok {
   background: var(--green-bg);
   border: 1px solid rgba(48, 209, 88, 0.2);
@@ -478,8 +539,14 @@ a:hover {
 }
 
 @keyframes flashSlideIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .flash-error {
@@ -582,8 +649,7 @@ a:hover {
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 4px 16px var(--accent-glow);
+  filter: brightness(1.06);
 }
 
 .btn:disabled,
@@ -615,7 +681,21 @@ a:hover {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Lightweight inline loading spinner — used in mini-ledger fetches. */
+.lk-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border2, rgba(128, 128, 128, 0.35));
+  border-top-color: var(--brand, #3b82f6);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
 }
 
 .btn-full {
@@ -1070,6 +1150,81 @@ input.amount-input {
   font-size: 14px;
 }
 
+/* Reports type-filter pills: scope totals to a single row type.
+   Full-width row so it wraps above the date inputs without squeezing them. */
+.type-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-basis: 100%;
+  margin-bottom: 4px;
+}
+.type-pill {
+  appearance: none;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.2));
+  background: var(--surface2, rgba(127, 127, 127, 0.04));
+  color: var(--text2, #94a3b8);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.type-pill:hover {
+  background: var(--surface, rgba(127, 127, 127, 0.08));
+  color: var(--text, inherit);
+  transform: translateY(-1px);
+}
+.type-pill.active {
+  background: var(--accent, #0071e3);
+  border-color: var(--accent, #0071e3);
+  color: #fff;
+  font-weight: 600;
+}
+.type-pill.active:hover {
+  filter: brightness(1.06);
+  transform: none;
+}
+
+/* Inline hint shown when the user presses Enter on unmatched free-text
+   in the search input. Reuses the surface/border palette so it never
+   clashes with either theme. Animates open/close for subtle feedback. */
+.search-hint {
+  margin-top: 6px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--text2, #94a3b8);
+  background: var(--accent-bg, rgba(0, 113, 227, 0.08));
+  border: 1px solid var(--accent, #0071e3);
+  border-radius: 8px;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    max-height 0.2s ease,
+    margin-top 0.2s ease,
+    padding 0.2s ease;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+}
+.search-hint.visible {
+  opacity: 1;
+  max-height: 60px;
+  margin-top: 6px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
 /* ============================================================
    OPENING BALANCE BAR
    ============================================================ */
@@ -1125,9 +1280,10 @@ input.amount-input {
 }
 
 .section-title {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
+  color: var(--text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1204,18 +1360,56 @@ input.amount-input {
   animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.entry-row.transfer-highlight {
+  background: var(--blue-bg);
+}
+
+.entry-row.drawing-highlight {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.entry-row.transfer-highlight:hover {
+  background: rgba(96, 165, 250, 0.18);
+}
+
+.entry-row.drawing-highlight:hover {
+  background: rgba(245, 158, 11, 0.14);
+}
+
 /* Stagger animation */
-.entry-row:nth-child(1) { animation-delay: 0s; }
-.entry-row:nth-child(2) { animation-delay: 0.03s; }
-.entry-row:nth-child(3) { animation-delay: 0.06s; }
-.entry-row:nth-child(4) { animation-delay: 0.09s; }
-.entry-row:nth-child(5) { animation-delay: 0.12s; }
-.entry-row:nth-child(6) { animation-delay: 0.15s; }
-.entry-row:nth-child(7) { animation-delay: 0.18s; }
-.entry-row:nth-child(8) { animation-delay: 0.21s; }
-.entry-row:nth-child(9) { animation-delay: 0.24s; }
-.entry-row:nth-child(10) { animation-delay: 0.27s; }
-.entry-row:nth-child(n + 11) { animation-delay: 0.3s; }
+.entry-row:nth-child(1) {
+  animation-delay: 0s;
+}
+.entry-row:nth-child(2) {
+  animation-delay: 0.03s;
+}
+.entry-row:nth-child(3) {
+  animation-delay: 0.06s;
+}
+.entry-row:nth-child(4) {
+  animation-delay: 0.09s;
+}
+.entry-row:nth-child(5) {
+  animation-delay: 0.12s;
+}
+.entry-row:nth-child(6) {
+  animation-delay: 0.15s;
+}
+.entry-row:nth-child(7) {
+  animation-delay: 0.18s;
+}
+.entry-row:nth-child(8) {
+  animation-delay: 0.21s;
+}
+.entry-row:nth-child(9) {
+  animation-delay: 0.24s;
+}
+.entry-row:nth-child(10) {
+  animation-delay: 0.27s;
+}
+.entry-row:nth-child(n + 11) {
+  animation-delay: 0.3s;
+}
 
 .entry-row:hover {
   background: var(--surface2);
@@ -1267,6 +1461,10 @@ input.amount-input {
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .entry-category {
@@ -1276,6 +1474,42 @@ input.amount-input {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin-top: 2px;
+}
+
+.entry-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-left: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text2);
+  vertical-align: middle;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.entry-badge.transfer {
+  color: var(--blue);
+  background: var(--blue-bg);
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+.entry-badge.drawing {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.entry-badge.expense {
+  color: var(--text3);
+}
+
+.section-emoji {
+  font-size: 0.9em;
+  margin-right: 2px;
 }
 
 .entry-notes {
@@ -1295,8 +1529,12 @@ input.amount-input {
   letter-spacing: -0.3px;
 }
 
-.entry-amount.recovery { color: var(--green); }
-.entry-amount.expense { color: var(--red); }
+.entry-amount.recovery {
+  color: var(--green);
+}
+.entry-amount.expense {
+  color: var(--red);
+}
 
 .entry-actions {
   display: flex;
@@ -1368,28 +1606,450 @@ input.amount-input {
   grid-template-columns: repeat(3, 1fr);
 }
 
-/* --- Category color system (fixed hues, consistent across list + chart) --- */
-:root {
-  --cat-food:      #10B981; /* Green  */
-  --cat-transport: #F59E0B; /* Orange */
-  --cat-bank:      #3B82F6; /* Blue   */
-  --cat-utility:   #06B6D4; /* Cyan   */
-  --cat-zakat:     #8B5CF6; /* Purple */
-  --cat-drawing:   #EC4899; /* Pink   */
-  --cat-other:     #6B7280; /* Gray   */
-
-  --amt-recovery:  #22C55E;
-  --amt-expense:   #EF4444;
-  --amt-bank:      #3B82F6;
-  --amt-online:    #8B5CF6;
-  --amt-neutral:   #6B7280;
-
-  --medal-gold:    #FFD700;
-  --medal-silver:  #C0C0C0;
-  --medal-bronze:  #CD7F32;
+/* 5-up summary row — Recovery / Expenses / Outflow / Profit-Loss / Closing.
+   Collapses to 3 then 2 columns on narrower viewports so the Pakistan-shop
+   laptop screens (≥ 1366px) show the clean single row while still staying
+   usable at ~ 900px, e.g. on the desktop zoom-in view. */
+.summary-cards.summary-cards-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-/* Colored dot prefix for category rows */
+/* 6-up summary row used by the simplified Reports overview.
+   PKR amounts in the shop's range reach 9 mono characters plus the "Rs. "
+   prefix, so a 1/6-width card on a 1366–1600px screen can't fit them on a
+   single line. We keep 6-across only on very wide screens (≥1700px) and
+   fall back to 3-across / 2-across / 1-across for everything else so
+   numbers never wrap mid-digit. */
+.summary-cards.summary-cards-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+@media (max-width: 1700px) {
+  .summary-cards.summary-cards-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .summary-cards.summary-cards-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 460px) {
+  .summary-cards.summary-cards-6 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Simple horizontal progress bar used in the redesigned Reports page for
+   the Online / Expense breakdown sections. Keeps styling minimal — a track
+   and a filled portion — so it reads as "share of total" without charts. */
+.bar-track {
+  height: 6px;
+  background: var(--bg3, rgba(0, 0, 0, 0.06));
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+  width: 100%;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand, #0a84ff);
+  transition: width 0.3s ease;
+}
+.bar-fill.green { background: var(--green, #22c55e); }
+.bar-fill.amber { background: var(--amber, #f59e0b); }
+.bar-fill.red   { background: var(--red, #ef4444); }
+.bar-fill.blue  { background: var(--brand, #0a84ff); }
+
+/* Bank Slip row inside the Expense Breakdown is an informational "transfer"
+   entry, not a business expense. Subtle blue-tinted background + tag make it
+   easy to spot that its amount does not feed the red expense total above. */
+.cat-row-transfer {
+  background: rgba(10, 132, 255, 0.05);
+}
+.cat-row-transfer .rep-amount {
+  color: var(--brand, #0a84ff);
+}
+.transfer-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--brand, #0a84ff);
+  background: rgba(10, 132, 255, 0.12);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+/* Dedicated breakdown row — grid layout, no flex-direction conflicts with
+   the existing `.summary-row` class. Label on the left, amount on the right,
+   optional % meta muted, and a full-width bar underneath.
+   Works for both <div> and <a> elements (rep-row-link). No negative margins
+   so rows never overflow the scroll container horizontally. */
+.rep-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 16px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.rep-row:last-child {
+  border-bottom: none;
+}
+.rep-row .rep-label {
+  font-size: 14px;
+  color: var(--text2);
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.rep-row .rep-amount {
+  font-family: "SF Mono", "Space Mono", monospace;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: -0.2px;
+}
+.rep-row .rep-meta {
+  color: var(--text3);
+  font-weight: 500;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.rep-row .bar-track {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+/* Tighter stat card variant used on the 6-card Reports overview — left-aligned
+   label + value, smaller padding, nowrap amount so long PKR values never
+   wrap mid-digit (e.g. "Rs. 3,38,46,42<br>6"). tabular-nums keeps digits at
+   equal width so rows align cleanly. */
+.summary-stat-card.stat-compact {
+  text-align: left;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.summary-stat-card.stat-compact .stat-label {
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.summary-stat-card.stat-compact .stat-value {
+  font-size: clamp(14px, 1.35vw, 19px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+}
+
+/* Side-by-side Online + Expense breakdown cards on wide screens; stacks
+   below 1024px so narrow laptops and tablets still read comfortably.
+   align-items: start lets each card take its NATURAL height so Online (3
+   sources) doesn't get stretched to match Expense (20+ categories). Both
+   cards top-align, which is the expected dashboard paired-card layout. */
+.reports-breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 16px;
+  margin-top: 20px;
+}
+@media (max-width: 1024px) {
+  .reports-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Reports filter card — extra breathing room between fields, between the
+   form and the chip/divider rows, and between Filter + Clear so the card
+   doesn't feel like a densely-packed form. */
+.card.reports-filter-card {
+  margin-bottom: 20px;
+  padding: 22px 24px;
+}
+.filter-form.reports-filter-form {
+  gap: 16px 18px;
+  align-items: flex-end;
+}
+.filter-form.reports-filter-form .form-group {
+  margin-bottom: 0;
+  flex: 1 1 170px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.filter-form.reports-filter-form .form-group label {
+  margin-bottom: 0;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text3, #8b8b93);
+  font-weight: 600;
+}
+.filter-form.reports-filter-form .filter-input {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Button group at the end of the filter row — keeps Filter + Clear on the
+   same line (they wrap together), with proper spacing between them. */
+.filter-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+
+/* Divider between the main filter and the Monthly PDF row inside the same
+   card — full-width thin rule plus roomier vertical spacing. */
+.reports-filter-divider {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+}
+
+/* Active filter chip shown under the filter form when a salesman is selected */
+.filter-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface2, rgba(10, 132, 255, 0.08));
+  border: 1px solid var(--border, #e5e5ea);
+  font-size: 13px;
+  color: var(--text2);
+}
+.filter-chip strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.filter-chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--border, rgba(0, 0, 0, 0.08));
+  color: var(--text2);
+  font-size: 14px;
+  line-height: 1;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+.filter-chip-clear:hover {
+  background: var(--red, #ef4444);
+  color: #fff;
+}
+
+/* Salesman performance row — small circular avatar with initial, plus a
+   muted "Filter" link on the right that narrows /reports to that salesman. */
+.salesman-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0a84ff, #5856d6);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(10, 132, 255, 0.25);
+}
+.rep-filter-link {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--brand, #0a84ff);
+  text-decoration: none;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
+}
+.rep-filter-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+.rep-row-active {
+  background: var(--surface2, rgba(10, 132, 255, 0.08));
+  border-left: 3px solid var(--brand, #0a84ff);
+  padding-left: 9px !important;
+}
+
+/* Clickable breakdown row — full row navigates to a filtered /reports view
+   in the same window. Subtle hover + active feedback replaces the old
+   tiny "Filter" link for a much larger tap target. */
+a.rep-row-link {
+  cursor: pointer;
+}
+a.rep-row-link:hover {
+  background: var(--surface2, rgba(10, 132, 255, 0.05));
+  text-decoration: none;
+}
+a.rep-row-link:active {
+  transform: scale(0.995);
+}
+a.rep-row-link:focus-visible {
+  outline: 2px solid var(--brand, #0a84ff);
+  outline-offset: -2px;
+}
+
+/* Cards in the breakdown grid use their natural content height. The
+   Expense list (20+ categories) is bounded by rep-scroll's max-height so
+   it can't stretch the page, while the Online card (2-3 sources) stays
+   compact — no forced stretching, no empty whitespace. */
+.breakdown-card {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.rep-scroll {
+  min-height: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text3, #b0b0b5) transparent;
+}
+.rep-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.rep-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rep-scroll::-webkit-scrollbar-thumb {
+  background: var(--text3, #c7c7cc);
+  border-radius: 3px;
+  opacity: 0.5;
+}
+.rep-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text2, #a1a1a6);
+}
+/* Salesman card spans the full width below the side-by-side grid — taller
+   max-height since it has its own row. */
+.breakdown-card-wide .rep-scroll {
+  max-height: 320px;
+}
+@media (max-width: 1200px) {
+  .summary-cards.summary-cards-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .summary-cards.summary-cards-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 7-up summary row — Recovery / Expenses / Business Expense / Drawings /
+   Outflow / Profit-Loss / Closing. Auto-fit wraps cleanly at narrow widths
+   so 1366px laptops still land on a single row, while ~1024px drops to two. */
+.summary-cards.summary-cards-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+@media (max-width: 1500px) {
+  .summary-cards.summary-cards-7 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1024px) {
+  .summary-cards.summary-cards-7 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .summary-cards.summary-cards-7 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* --- Secondary summary row: supporting detail (Expenses / Drawings /
+   Outflow). Same card shell, smaller padding + value so the eye lands on
+   the primary row first. Opacity shift helps the demotion without needing
+   a new color palette. --- */
+.summary-secondary {
+  margin-top: -8px;
+  margin-bottom: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  opacity: 0.9;
+}
+.summary-secondary .summary-stat-card {
+  padding: 14px 16px;
+}
+.summary-secondary .summary-stat-card .stat-value {
+  font-size: clamp(14px, 1.6vw, 18px);
+}
+.summary-secondary .summary-stat-card .stat-label {
+  font-size: 9px;
+  margin-bottom: 6px;
+}
+@media (max-width: 760px) {
+  .summary-secondary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .summary-secondary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Category color system (fixed hues, consistent across list + chart) --- */
+:root {
+  --cat-food: #10b981; /* Green  */
+  --cat-transport: #f59e0b; /* Orange */
+  --cat-bank: #3b82f6; /* Blue   */
+  --cat-utility: #06b6d4; /* Cyan   */
+  --cat-zakat: #8b5cf6; /* Purple */
+  --cat-drawing: #ec4899; /* Pink   */
+  --cat-other: #6b7280; /* Gray   */
+
+  --amt-recovery: #22c55e;
+  --amt-expense: #ef4444;
+  --amt-bank: #3b82f6;
+  --amt-online: #8b5cf6;
+  --amt-neutral: #6b7280;
+
+  --medal-gold: #ffd700;
+  --medal-silver: #c0c0c0;
+  --medal-bronze: #cd7f32;
+}
+
+/* Colored dot prefix for category rows. Default hue ensures categories
+   outside the fixed colour map (e.g. "Fbr Challan", "Stationary", "Food")
+   still show a visible dot rather than a transparent placeholder. */
 .cat-dot {
   display: inline-block;
   width: 10px;
@@ -1397,41 +2057,98 @@ input.amount-input {
   border-radius: 50%;
   margin-right: 10px;
   vertical-align: middle;
+  background: var(--cat-other, #6b7280);
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
 }
-.cat-food      .cat-dot, .cat-dot.cat-food      { background: var(--cat-food); }
-.cat-transport .cat-dot, .cat-dot.cat-transport { background: var(--cat-transport); }
-.cat-bank      .cat-dot, .cat-dot.cat-bank      { background: var(--cat-bank); }
-.cat-utility   .cat-dot, .cat-dot.cat-utility   { background: var(--cat-utility); }
-.cat-zakat     .cat-dot, .cat-dot.cat-zakat     { background: var(--cat-zakat); }
-.cat-drawing   .cat-dot, .cat-dot.cat-drawing   { background: var(--cat-drawing); }
-.cat-other     .cat-dot, .cat-dot.cat-other     { background: var(--cat-other); }
+.cat-food .cat-dot,
+.cat-dot.cat-food {
+  background: var(--cat-food);
+}
+.cat-transport .cat-dot,
+.cat-dot.cat-transport {
+  background: var(--cat-transport);
+}
+.cat-bank .cat-dot,
+.cat-dot.cat-bank {
+  background: var(--cat-bank);
+}
+.cat-utility .cat-dot,
+.cat-dot.cat-utility {
+  background: var(--cat-utility);
+}
+.cat-zakat .cat-dot,
+.cat-dot.cat-zakat {
+  background: var(--cat-zakat);
+}
+.cat-drawing .cat-dot,
+.cat-dot.cat-drawing {
+  background: var(--cat-drawing);
+}
+.cat-other .cat-dot,
+.cat-dot.cat-other {
+  background: var(--cat-other);
+}
 
 /* Category row — label + amount share the category's hue */
-.cat-row .summary-label       { font-weight: 600; }
-.cat-row.cat-food      .summary-amount { color: var(--cat-food); }
-.cat-row.cat-transport .summary-amount { color: var(--cat-transport); }
-.cat-row.cat-bank      .summary-amount { color: var(--cat-bank); }
-.cat-row.cat-utility   .summary-amount { color: var(--cat-utility); }
-.cat-row.cat-zakat     .summary-amount { color: var(--cat-zakat); }
-.cat-row.cat-drawing   .summary-amount { color: var(--cat-drawing); }
-.cat-row.cat-other     .summary-amount { color: var(--cat-other); }
+.cat-row .summary-label {
+  font-weight: 600;
+}
+.cat-row.cat-food .summary-amount {
+  color: var(--cat-food);
+}
+.cat-row.cat-transport .summary-amount {
+  color: var(--cat-transport);
+}
+.cat-row.cat-bank .summary-amount {
+  color: var(--cat-bank);
+}
+.cat-row.cat-utility .summary-amount {
+  color: var(--cat-utility);
+}
+.cat-row.cat-zakat .summary-amount {
+  color: var(--cat-zakat);
+}
+.cat-row.cat-drawing .summary-amount {
+  color: var(--cat-drawing);
+}
+.cat-row.cat-other .summary-amount {
+  color: var(--cat-other);
+}
 
 /* Number color utility classes — use these when .recovery/.expense are too generic */
-.amt-recovery { color: var(--amt-recovery); }
-.amt-expense  { color: var(--amt-expense);  }
-.amt-bank     { color: var(--amt-bank);     }
-.amt-online   { color: var(--amt-online);   }
-.amt-neutral  { color: var(--amt-neutral);  }
+.amt-recovery {
+  color: var(--amt-recovery);
+}
+.amt-expense {
+  color: var(--amt-expense);
+}
+.amt-bank {
+  color: var(--amt-bank);
+}
+.amt-online {
+  color: var(--amt-online);
+}
+.amt-neutral {
+  color: var(--amt-neutral);
+}
 
 /* Payment-type rows in Bank vs Cash summary */
-.pay-row.pay-cash   .summary-label,
-.pay-row.pay-cash   .summary-amount { color: var(--amt-recovery); }
+.pay-row.pay-cash .summary-label,
+.pay-row.pay-cash .summary-amount {
+  color: var(--amt-recovery);
+}
 .pay-row.pay-online .summary-label,
-.pay-row.pay-online .summary-amount { color: var(--amt-online); }
-.pay-row.pay-bank   .summary-label,
-.pay-row.pay-bank   .summary-amount { color: var(--amt-bank); }
-.pay-row .summary-label { font-weight: 600; }
+.pay-row.pay-online .summary-amount {
+  color: var(--amt-online);
+}
+.pay-row.pay-bank .summary-label,
+.pay-row.pay-bank .summary-amount {
+  color: var(--amt-bank);
+}
+.pay-row .summary-label {
+  font-weight: 600;
+}
 
 .pay-dot {
   display: inline-block;
@@ -1441,29 +2158,44 @@ input.amount-input {
   margin-right: 10px;
   vertical-align: middle;
 }
-.pay-dot.cash   { background: var(--amt-recovery); }
-.pay-dot.online { background: var(--amt-online); }
-.pay-dot.bank   { background: var(--amt-bank); }
+.pay-dot.cash {
+  background: var(--amt-recovery);
+}
+.pay-dot.online {
+  background: var(--amt-online);
+}
+.pay-dot.bank {
+  background: var(--amt-bank);
+}
 
 /* Top Salesmen — medal accent on insight cards */
 .insight-card.medal-1 {
   border-color: rgba(255, 215, 0, 0.5);
-  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.25),
-              0 8px 24px rgba(255, 215, 0, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(255, 215, 0, 0.25),
+    0 8px 24px rgba(255, 215, 0, 0.08);
 }
 .insight-card.medal-2 {
   border-color: rgba(192, 192, 192, 0.55);
-  box-shadow: 0 0 0 1px rgba(192, 192, 192, 0.25),
-              0 8px 24px rgba(192, 192, 192, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(192, 192, 192, 0.25),
+    0 8px 24px rgba(192, 192, 192, 0.08);
 }
 .insight-card.medal-3 {
   border-color: rgba(205, 127, 50, 0.55);
-  box-shadow: 0 0 0 1px rgba(205, 127, 50, 0.25),
-              0 8px 24px rgba(205, 127, 50, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(205, 127, 50, 0.25),
+    0 8px 24px rgba(205, 127, 50, 0.08);
 }
-.insight-card.medal-1 .insight-label { color: var(--medal-gold); }
-.insight-card.medal-2 .insight-label { color: var(--medal-silver); }
-.insight-card.medal-3 .insight-label { color: var(--medal-bronze); }
+.insight-card.medal-1 .insight-label {
+  color: var(--medal-gold);
+}
+.insight-card.medal-2 .insight-label {
+  color: var(--medal-silver);
+}
+.insight-card.medal-3 .insight-label {
+  color: var(--medal-bronze);
+}
 .insight-card.medal-1 .insight-value,
 .insight-card.medal-2 .insight-value,
 .insight-card.medal-3 .insight-value {
@@ -1471,7 +2203,10 @@ input.amount-input {
 }
 
 /* Bank Transfer totals always render blue, never red */
-.bt-amount, .mono.bank-transfer { color: var(--amt-bank); }
+.bt-amount,
+.mono.bank-transfer {
+  color: var(--amt-bank);
+}
 
 /* --- Salesmen management page --- */
 .status-badge {
@@ -1485,23 +2220,29 @@ input.amount-input {
 }
 .status-badge.status-active {
   background: rgba(48, 209, 88, 0.15);
-  color: var(--green, #30D158);
+  color: var(--green, #30d158);
   border: 1px solid rgba(48, 209, 88, 0.35);
 }
 .status-badge.status-inactive {
   background: rgba(255, 69, 58, 0.12);
-  color: var(--red, #FF453A);
+  color: var(--red, #ff453a);
   border: 1px solid rgba(255, 69, 58, 0.3);
 }
-.salesman-row.salesman-inactive .entry-name-text { opacity: 0.6; }
-.salesman-row.salesman-inactive .entry-notes     { opacity: 0.55; }
+.salesman-row.salesman-inactive .entry-name-text {
+  opacity: 0.6;
+}
+.salesman-row.salesman-inactive .entry-notes {
+  opacity: 0.55;
+}
 
 /* --- Salesman autocomplete: "Add new" row styling --- */
 .suggestion-item.suggestion-add-new {
   border-top: 1px dashed var(--border, rgba(127, 127, 127, 0.25));
-  color: var(--brand, #0A84FF);
+  color: var(--brand, #0a84ff);
 }
-.suggestion-item.suggestion-add-new strong { color: var(--brand, #0A84FF); }
+.suggestion-item.suggestion-add-new strong {
+  color: var(--brand, #0a84ff);
+}
 
 .stat-trend {
   display: inline-block;
@@ -1509,8 +2250,12 @@ input.amount-input {
   font-size: 11px;
   vertical-align: middle;
 }
-.stat-trend.up   { color: var(--green, #30D158); }
-.stat-trend.down { color: var(--red, #FF453A); }
+.stat-trend.up {
+  color: var(--green, #30d158);
+}
+.stat-trend.down {
+  color: var(--red, #ff453a);
+}
 
 .bank-transfer-strip {
   display: flex;
@@ -1523,9 +2268,29 @@ input.amount-input {
   border-radius: 10px;
   font-size: 13px;
 }
-.bank-transfer-strip .bt-icon   { font-size: 16px; }
-.bank-transfer-strip .bt-label  { color: var(--text2, #94a3b8); flex: 1; }
-.bank-transfer-strip .bt-amount { font-weight: 600; color: var(--text, inherit); }
+.bank-transfer-strip .bt-icon {
+  font-size: 16px;
+}
+.bank-transfer-strip .bt-label {
+  color: var(--text2, #94a3b8);
+  flex: 1;
+}
+.bank-transfer-strip .bt-amount {
+  font-weight: 600;
+  color: var(--text, inherit);
+}
+a.bank-transfer-strip-link {
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease,
+    transform 0.15s ease;
+  cursor: pointer;
+}
+a.bank-transfer-strip-link:hover {
+  background: var(--blue-bg, rgba(96, 165, 250, 0.1));
+  border-color: var(--blue, rgba(96, 165, 250, 0.45));
+  transform: translateY(-1px);
+}
 
 .summary-stat-card.highlight {
   position: relative;
@@ -1576,7 +2341,10 @@ input.amount-input {
   -webkit-backdrop-filter: blur(30px) saturate(180%);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
-  overflow: hidden;
+  /* overflow: visible so the custom-tooltip bubble can escape the card's
+     rounded bounds. The ::before gradient strip is self-bounded so this
+     doesn't affect the left accent. */
+  overflow: visible;
   box-shadow: var(--shadow);
 }
 
@@ -1591,9 +2359,15 @@ input.amount-input {
   border-radius: 0 4px 4px 0;
 }
 
-.summary-stat-card.green::before { background: var(--gradient-green); }
-.summary-stat-card.red::before { background: var(--gradient-red); }
-.summary-stat-card.highlight::before { background: var(--gradient-brand); }
+.summary-stat-card.green::before {
+  background: var(--gradient-green);
+}
+.summary-stat-card.red::before {
+  background: var(--gradient-red);
+}
+.summary-stat-card.highlight::before {
+  background: var(--gradient-brand);
+}
 
 .summary-stat-card:hover {
   box-shadow: var(--shadow-hover);
@@ -1612,14 +2386,26 @@ input.amount-input {
 
 .summary-stat-card .stat-value {
   font-family: "SF Mono", "Space Mono", monospace;
-  font-size: 20px;
+  font-size: clamp(16px, 2.2vw, 24px);
+  line-height: 1.2;
   font-weight: 700;
   position: relative;
   letter-spacing: -0.3px;
+  /* Contain long PKR numbers inside the card without spilling into the next
+     grid cell. overflow: hidden is kept on the value (not the card) so the
+     custom-tooltip bubble can still float above the card. */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  min-width: 0;
 }
 
-.summary-stat-card.green .stat-value { color: var(--green); }
-.summary-stat-card.red .stat-value { color: var(--red); }
+.summary-stat-card.green .stat-value {
+  color: var(--green);
+}
+.summary-stat-card.red .stat-value {
+  color: var(--red);
+}
 
 /* === CLOSING BALANCE — Hero Card === */
 .summary-stat-card.highlight {
@@ -1654,6 +2440,185 @@ input.amount-input {
   box-shadow:
     var(--shadow-elevated),
     0 0 60px var(--closing-glow);
+}
+
+/* --- Amber variant for the Drawings card — mirrors the Drawing badge
+   colour on the Daily page so the reader links "orange" → "owner withdrawal"
+   without scanning the label. --- */
+.summary-stat-card.amber::before {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+}
+.summary-stat-card.amber .stat-value {
+  color: #f59e0b;
+}
+
+/* --- Profit / Loss hero variant: scaled-up, subtle tinted backdrop, and
+   an oversized trend icon. Sits alongside Closing Balance as the two
+   "answer" cards the user reads first. Accepts .green or .red alongside
+   so colour still follows the sign of the value. --- */
+.summary-stat-card.hero-profit {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(127, 127, 127, 0.04) 0%,
+      var(--surface-glass) 60%
+    );
+  border-width: 1.5px;
+  /* Gentle scale so Profit/Loss reads as the "answer" of the summary row
+     without any extra decoration. Combines with the hover translate below. */
+  transform: scale(1.03);
+}
+.summary-stat-card.hero-profit:hover {
+  transform: translateY(-2px) scale(1.03);
+}
+.summary-stat-card.hero-profit.green {
+  background: linear-gradient(
+    180deg,
+    rgba(48, 209, 88, 0.08) 0%,
+    var(--surface-glass) 60%
+  );
+  border-color: rgba(48, 209, 88, 0.22);
+}
+.summary-stat-card.hero-profit.red {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 69, 58, 0.08) 0%,
+    var(--surface-glass) 60%
+  );
+  border-color: rgba(255, 69, 58, 0.22);
+}
+.summary-stat-card.hero-profit .stat-value {
+  font-size: clamp(18px, 2.4vw, 26px);
+  letter-spacing: -0.5px;
+}
+.summary-stat-card.hero-profit .stat-label {
+  font-size: 11px;
+}
+.summary-stat-card.hero-profit .hero-icon {
+  font-size: 14px;
+  margin-left: 8px;
+}
+
+/* --- Micro-UX: cards already lift on hover (0.25s cubic-bezier). Show a
+   help cursor when a card carries a tooltip so users discover the hover
+   explainer. Applies to any [title] card — no template change needed. --- */
+.summary-stat-card[title] {
+  cursor: help;
+}
+
+/* --- Custom tooltip bubble: better readability than native title="" and
+   works on touch devices (tap-to-reveal handled by a tiny IIFE in the
+   template). The native title="" stays in place as an accessibility
+   fallback for screen readers and older browsers. --- */
+.custom-tooltip {
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  background: var(--surface2);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  max-width: 260px;
+  white-space: normal;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  z-index: 10;
+  text-align: center;
+}
+.custom-tooltip::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: var(--surface2) transparent transparent transparent;
+}
+.summary-stat-card:hover .custom-tooltip,
+.summary-stat-card.tooltip-visible .custom-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* --- Negative-trend warning banner: shown above the bar chart only when
+   JS detects a 3-day losing streak. Subtle red tint, no animation, no
+   icons beyond the ⚠ inside the template. --- */
+.trend-warning {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+  display: inline-block;
+}
+.trend-warning.negative {
+  background: rgba(255, 69, 58, 0.1);
+  color: #ff453a;
+  border: 1px solid rgba(255, 69, 58, 0.22);
+}
+[data-theme="light"] .trend-warning.negative {
+  color: #d70015;
+  background: rgba(215, 0, 21, 0.08);
+  border-color: rgba(215, 0, 21, 0.2);
+}
+
+/* --- Filter helper text: small muted hint above the filter form
+   so first-time users understand what the controls do without a tour. --- */
+.filter-helper {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 10px;
+  letter-spacing: 0.1px;
+}
+
+/* --- Chart legend row: colour-dot key above the bar chart. Mirrors the
+   three dataset colours exactly (green / red / amber) so readers map
+   bar colour → series without scanning the Chart.js legend. --- */
+.chart-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--text3);
+}
+.legend-swatch.swatch-recovery {
+  background: #30d158;
+}
+.legend-swatch.swatch-business {
+  background: #ff453a;
+}
+.legend-swatch.swatch-drawing {
+  background: #f59e0b;
+}
+[data-theme="light"] .legend-swatch.swatch-recovery {
+  background: #248a3d;
+}
+[data-theme="light"] .legend-swatch.swatch-business {
+  background: #d70015;
+}
+[data-theme="light"] .legend-swatch.swatch-drawing {
+  background: #d97706;
 }
 
 /* ============================================================
@@ -1694,14 +2659,28 @@ input.amount-input {
   transform: scale(1.1);
 }
 
-.insight-best { background: var(--green-bg); }
-.insight-worst { background: var(--red-bg); }
-.insight-avg { background: var(--blue-bg); }
+.insight-best {
+  background: var(--green-bg);
+}
+.insight-worst {
+  background: var(--red-bg);
+}
+.insight-avg {
+  background: var(--blue-bg);
+}
 
-[data-theme="dark"] .insight-card { border: 1px solid var(--border); }
-[data-theme="dark"] .insight-best { background: rgba(48, 209, 88, 0.08); }
-[data-theme="dark"] .insight-worst { background: rgba(255, 69, 58, 0.08); }
-[data-theme="dark"] .insight-avg { background: rgba(10, 132, 255, 0.08); }
+[data-theme="dark"] .insight-card {
+  border: 1px solid var(--border);
+}
+[data-theme="dark"] .insight-best {
+  background: rgba(48, 209, 88, 0.08);
+}
+[data-theme="dark"] .insight-worst {
+  background: rgba(255, 69, 58, 0.08);
+}
+[data-theme="dark"] .insight-avg {
+  background: rgba(10, 132, 255, 0.08);
+}
 
 /* Icon badge */
 .insight-icon {
@@ -1723,9 +2702,15 @@ input.amount-input {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.insight-best .insight-icon { color: var(--green); }
-.insight-worst .insight-icon { color: var(--red); }
-.insight-avg .insight-icon { color: var(--blue); }
+.insight-best .insight-icon {
+  color: var(--green);
+}
+.insight-worst .insight-icon {
+  color: var(--red);
+}
+.insight-avg .insight-icon {
+  color: var(--blue);
+}
 
 .insight-body {
   min-width: 0;
@@ -1757,13 +2742,25 @@ input.amount-input {
   animation: insightFadeUp 0.4s ease;
 }
 
-.insight-best .insight-value { color: var(--green); }
-.insight-worst .insight-value { color: var(--red); }
-.insight-avg .insight-value { color: var(--blue); }
+.insight-best .insight-value {
+  color: var(--green);
+}
+.insight-worst .insight-value {
+  color: var(--red);
+}
+.insight-avg .insight-value {
+  color: var(--blue);
+}
 
 @keyframes insightFadeUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 640px) {
@@ -1808,7 +2805,9 @@ input.amount-input {
 }
 
 @keyframes chartFade {
-  to { opacity: 1; }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Chart skeleton */
@@ -1915,6 +2914,11 @@ input.amount-input {
   background-clip: text;
 }
 
+.summary-row.outflow {
+  background: var(--surface2);
+  border-radius: 8px;
+}
+
 /* Closing hero */
 .closing-hero {
   font-size: 28px !important;
@@ -1963,11 +2967,22 @@ input.amount-input {
   background: var(--surface2);
 }
 
-.col-num { width: 40px; }
-.col-desc { width: 30%; }
-.col-amount { width: 25%; }
-.col-notes { width: 25%; }
-.col-action { width: 120px; text-align: center; }
+.col-num {
+  width: 40px;
+}
+.col-desc {
+  width: 30%;
+}
+.col-amount {
+  width: 25%;
+}
+.col-notes {
+  width: 25%;
+}
+.col-action {
+  width: 120px;
+  text-align: center;
+}
 
 .notes {
   color: var(--text3);
@@ -2116,9 +3131,15 @@ input.amount-input {
   border-radius: 0 4px 4px 0;
 }
 
-.dashboard-stat:nth-child(1)::before { background: var(--gradient-green); }
-.dashboard-stat:nth-child(2)::before { background: var(--gradient-red); }
-.dashboard-stat:nth-child(3)::before { background: var(--gradient-brand); }
+.dashboard-stat:nth-child(1)::before {
+  background: var(--gradient-green);
+}
+.dashboard-stat:nth-child(2)::before {
+  background: var(--gradient-red);
+}
+.dashboard-stat:nth-child(3)::before {
+  background: var(--gradient-brand);
+}
 
 .stat-label {
   font-size: 11px;
@@ -2241,8 +3262,13 @@ input.amount-input {
 }
 
 @keyframes iconFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 /* ============================================================
@@ -2513,7 +3539,10 @@ input.amount-input {
   border: 1.5px solid var(--border2);
   border-radius: 14px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
   font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -2542,7 +3571,9 @@ input.amount-input {
   padding: 6px 8px;
   border-radius: 8px;
   line-height: 1;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .pin-toggle:hover {
@@ -2604,9 +3635,11 @@ input.amount-input {
   padding: 16px 22px;
   margin-bottom: 16px;
   border-radius: 16px;
-  background: linear-gradient(135deg,
-              rgba(124, 58, 237, 0.12) 0%,
-              rgba(79, 70, 229, 0.12) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.12) 0%,
+    rgba(79, 70, 229, 0.12) 100%
+  );
   border: 1px solid rgba(180, 130, 255, 0.2);
   box-shadow: var(--shadow);
   animation: fadeInUp 0.35s ease both;
@@ -2645,9 +3678,11 @@ input.amount-input {
 }
 
 .closed-banner.reopened-banner {
-  background: linear-gradient(135deg,
-              rgba(48, 209, 88, 0.12) 0%,
-              rgba(16, 185, 129, 0.12) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(48, 209, 88, 0.12) 0%,
+    rgba(16, 185, 129, 0.12) 100%
+  );
   border: 1px solid rgba(48, 209, 88, 0.2);
 }
 
@@ -2730,8 +3765,12 @@ input.amount-input {
   letter-spacing: -0.3px;
 }
 
-.sticky-value.green { color: var(--green); }
-.sticky-value.red { color: var(--red); }
+.sticky-value.green {
+  color: var(--green);
+}
+.sticky-value.red {
+  color: var(--red);
+}
 
 .sticky-value.brand {
   background: var(--gradient-brand);
@@ -2852,10 +3891,18 @@ body::before {
   background: var(--border2);
 }
 
-.skeleton-line.w60 { width: 60%; }
-.skeleton-line.w30 { width: 30%; }
-.skeleton-line.w20 { width: 20%; }
-.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w60 {
+  width: 60%;
+}
+.skeleton-line.w30 {
+  width: 30%;
+}
+.skeleton-line.w20 {
+  width: 20%;
+}
+.skeleton-line.w40 {
+  width: 40%;
+}
 
 .skeleton-block {
   flex: 1;
@@ -2865,8 +3912,13 @@ body::before {
 }
 
 @keyframes skeletonPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* ============================================================
@@ -3031,7 +4083,10 @@ body::before {
 
 /* Salesman row — smooth move/fade transition */
 .salesman-row {
-  transition: opacity 0.3s ease, transform 0.3s ease, background 0.2s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    background 0.2s ease;
 }
 
 .salesman-row.row-fading {
@@ -3071,20 +4126,42 @@ body::before {
 
 /* Mobile spacing */
 @media (max-width: 640px) {
-  .count-badge { display: inline-block; margin-left: 6px; font-size: 13px; }
-  .error-text  { font-size: 12px; }
+  .count-badge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 13px;
+  }
+  .error-text {
+    font-size: 12px;
+  }
 }
 
 /* ============================================================
    Owner Dashboard — minimal at-a-glance view
    ============================================================ */
-.dash-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dash-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-.dash-alerts { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
-.dash-alerts .flash { margin: 0; }
-.dash-alert-icon { margin-right: 6px; }
+.dash-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.dash-alerts .flash {
+  margin: 0;
+}
+.dash-alert-icon {
+  margin-right: 6px;
+}
 
-.dash-section-title { margin-top: 26px; margin-bottom: 12px; }
+.dash-section-title {
+  margin-top: 26px;
+  margin-bottom: 12px;
+}
 
 .dash-salesman-row {
   display: grid;
@@ -3121,7 +4198,9 @@ body::before {
   margin-top: 8px;
 }
 
-.dash-trend-card { padding: 20px 24px; }
+.dash-trend-card {
+  padding: 20px 24px;
+}
 .dash-spark {
   width: 100%;
   height: 90px;
@@ -3129,7 +4208,9 @@ body::before {
   overflow: visible;
 }
 .dash-spark-dot {
-  transition: r 0.15s ease, stroke-width 0.15s ease;
+  transition:
+    r 0.15s ease,
+    stroke-width 0.15s ease;
   cursor: help;
 }
 .dash-spark-dot:hover {
@@ -3160,8 +4241,12 @@ body::before {
 }
 
 @media (max-width: 640px) {
-  .dash-salesman-row { grid-template-columns: 1fr; }
-  .dash-trend-dates span:nth-child(even) { visibility: hidden; }
+  .dash-salesman-row {
+    grid-template-columns: 1fr;
+  }
+  .dash-trend-dates span:nth-child(even) {
+    visibility: hidden;
+  }
 }
 
 /* Clickable summary cards on the dashboard */
@@ -3177,7 +4262,9 @@ a.dash-card-link:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-hover);
 }
-a.dash-card-link:active { transform: translateY(-1px); }
+a.dash-card-link:active {
+  transform: translateY(-1px);
+}
 a.dash-card-link:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 3px;
@@ -3196,9 +4283,15 @@ a.dash-card-link:focus-visible {
   border-radius: 10px;
   background: var(--surface-glass, rgba(127, 127, 127, 0.08));
 }
-.dash-trend.good { color: var(--green); }
-.dash-trend.bad  { color: var(--red); }
-.dash-trend.flat { color: var(--muted); }
+.dash-trend.good {
+  color: var(--green);
+}
+.dash-trend.bad {
+  color: var(--red);
+}
+.dash-trend.flat {
+  color: var(--muted);
+}
 
 /* "Everything looks normal" — empty alert state */
 .dash-alerts-ok {
@@ -3219,8 +4312,15 @@ a.dash-card-link:focus-visible {
 /* ============================================================
    EXPENSE DRILL-DOWN (/expenses/details)
    ============================================================ */
-.xd-filter-card { padding: 16px 20px; margin-bottom: 18px; }
-.xd-filter-form { display: flex; flex-direction: column; gap: 12px; }
+.xd-filter-card {
+  padding: 16px 20px;
+  margin-bottom: 18px;
+}
+.xd-filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .xd-filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -3239,14 +4339,22 @@ a.dash-card-link:focus-visible {
   font-size: 14px;
   padding: 10px 12px;
 }
-.xd-quick-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.xd-quick-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
-.xd-section-title { margin-top: 22px; }
+.xd-section-title {
+  margin-top: 22px;
+}
 .xd-section-focus {
   color: var(--brand);
 }
 
-.xd-breakdown-card { padding: 16px 20px; }
+.xd-breakdown-card {
+  padding: 16px 20px;
+}
 .xd-breakdown-list {
   display: flex;
   flex-direction: column;
@@ -3259,7 +4367,10 @@ a.dash-card-link:focus-visible {
   gap: 12px;
   font-size: 14px;
 }
-.xd-break-name { color: var(--text); font-weight: 500; }
+.xd-break-name {
+  color: var(--text);
+  font-weight: 500;
+}
 .xd-break-bar {
   height: 8px;
   background: var(--surface2);
@@ -3273,10 +4384,20 @@ a.dash-card-link:focus-visible {
   border-radius: 6px;
   transition: width 0.3s ease;
 }
-.xd-break-amount { text-align: right; color: var(--text); }
-.xd-break-pct   { text-align: right; color: var(--text2); font-size: 12px; }
+.xd-break-amount {
+  text-align: right;
+  color: var(--text);
+}
+.xd-break-pct {
+  text-align: right;
+  color: var(--text2);
+  font-size: 12px;
+}
 
-.xd-table-card { padding: 0; overflow: hidden; }
+.xd-table-card {
+  padding: 0;
+  overflow: hidden;
+}
 .xd-table-scroll {
   max-height: 520px;
   overflow-y: auto;
@@ -3305,10 +4426,18 @@ a.dash-card-link:focus-visible {
   border-bottom: 1px solid var(--border2);
   vertical-align: top;
 }
-.xd-table tbody tr:last-child td { border-bottom: none; }
-.xd-table tbody tr:hover { background: var(--surface2); }
-.xd-right   { text-align: right; }
-.xd-nowrap  { white-space: nowrap; }
+.xd-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.xd-table tbody tr:hover {
+  background: var(--surface2);
+}
+.xd-right {
+  text-align: right;
+}
+.xd-nowrap {
+  white-space: nowrap;
+}
 
 .xd-tag {
   display: inline-block;
@@ -3343,14 +4472,316 @@ a.dash-card-link:focus-visible {
       "pct  pct";
     gap: 4px 12px;
   }
-  .xd-break-name   { grid-area: name; }
-  .xd-break-amount { grid-area: amount; }
-  .xd-break-bar    { grid-area: bar; }
-  .xd-break-pct    { grid-area: pct; text-align: left; }
+  .xd-break-name {
+    grid-area: name;
+  }
+  .xd-break-amount {
+    grid-area: amount;
+  }
+  .xd-break-bar {
+    grid-area: bar;
+  }
+  .xd-break-pct {
+    grid-area: pct;
+    text-align: left;
+  }
 }
 
 .fade-out {
   opacity: 0;
   transform: translateY(-5px);
   transition: all 0.3s ease;
+}
+
+/* --- Reports search autocomplete ---
+   Role separation:
+   - `.filter-form` (the outer flex row) owns LAYOUT: it lines up the date
+     inputs, this search field, and the Filter/Clear buttons in one row.
+   - `.search-input-container` owns POSITIONING only: it's the relative
+     anchor that `.suggestions-box` and `.search-clear` position against.
+   Keep these responsibilities separate — don't add `display: flex` here
+   or the clear button and dropdown (both absolutely positioned) stop
+   aligning predictably on narrow widths.
+*/
+.search-input-container {
+  position: relative;
+  width: 100%;
+  /* Must NOT clip: the dropdown is absolutely positioned below and would
+     be hidden by overflow:hidden on an ancestor. */
+  overflow: visible;
+}
+
+.search-input-container .search-input {
+  width: 100%;
+  padding-right: 34px; /* room for the clear button */
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted, #888);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.search-clear:hover {
+  background: var(--hover, #f0f0f0);
+  color: var(--text, #1d1d1f);
+}
+
+[data-theme="dark"] .search-clear:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
+}
+
+.suggestion-item strong {
+  font-weight: 700;
+  color: var(--accent, #007aff);
+}
+
+[data-theme="dark"] .suggestion-item strong {
+  color: #0a84ff;
+}
+
+@media (max-width: 640px) {
+  .suggestions-box {
+    max-height: 200px;
+    font-size: 13px;
+  }
+  .suggestion-item {
+    padding: 12px 12px;
+  } /* larger tap targets on mobile */
+}
+
+.suggestions-box {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px 0;
+  background: var(--surface, #fff);
+  color: var(--text, #1d1d1f);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* High layer so summary cards, chart cards, and hover-lift elements
+     below never paint over the dropdown. */
+  z-index: 99999;
+  pointer-events: auto;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.suggestions-box.is-open {
+  animation: suggestionsFadeIn 0.15s ease-in;
+}
+
+@keyframes suggestionsFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.suggestion-header {
+  padding: 8px 12px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #8a8a8e);
+  border-bottom: 1px solid var(--border, #eee);
+  background: transparent;
+  user-select: none;
+}
+
+.suggestion-item {
+  padding: 10px 12px;
+  margin: 2px 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.35;
+  border-radius: 6px;
+  border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item.active {
+  background: var(--hover, #f5f5f5);
+}
+
+.suggestion-item.selected-suggestion {
+  background-color: #e6f0ff;
+  font-weight: 600;
+}
+
+.suggestion-item.selected-suggestion.active,
+.suggestion-item.selected-suggestion:hover {
+  background-color: #d6e4ff;
+}
+
+.suggestion-empty {
+  padding: 14px 12px;
+  color: var(--muted, #888);
+  font-size: 13px;
+  text-align: center;
+}
+
+[data-theme="dark"] .suggestions-box {
+  background: #1c1c1e;
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .suggestion-header {
+  color: #8a8a8e;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .suggestion-item:hover,
+[data-theme="dark"] .suggestion-item.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .suggestion-item.selected-suggestion {
+  background-color: rgba(10, 132, 255, 0.22);
+}
+
+[data-theme="dark"] .suggestion-item.selected-suggestion.active,
+[data-theme="dark"] .suggestion-item.selected-suggestion:hover {
+  background-color: rgba(10, 132, 255, 0.32);
+}
+
+/* ---- Expandable Cards (Expense by Category, Advance Breakdown) ---- */
+.expandable-card {
+  position: relative;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+  will-change: transform;
+}
+
+.expandable-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.expandable-card .expand-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--muted, #888);
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 8px;
+  cursor: pointer;
+  display: none;
+  z-index: 2;
+}
+
+.expandable-card .expand-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text1, #1d1d1f);
+}
+
+[data-theme="dark"] .expandable-card .expand-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f7;
+}
+
+.expandable-card.expanded {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  z-index: 99998;
+  margin: 0;
+  overflow-y: auto;
+  cursor: default;
+  background: var(--surface, #ffffff);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  border-radius: 16px;
+  padding: 32px !important;
+  padding-bottom: 40px !important;
+  animation: cardZoomIn 0.2s ease-out;
+  transform-origin: center;
+}
+
+.expandable-card.expanded:hover {
+  transform: none;
+}
+
+.expandable-card.expanded .expand-close {
+  display: block;
+}
+
+[data-theme="dark"] .expandable-card.expanded {
+  background: #1c1c1e;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.expandable-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 99997;
+  animation: backdropFadeIn 0.18s ease-out;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .expandable-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+body.card-expanded-lock {
+  overflow: hidden;
+}
+
+@keyframes cardZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

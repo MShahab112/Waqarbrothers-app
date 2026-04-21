@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Details for: {{ name }} — {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Details for: <span class="accent">{{ name }}</span></div>
+        <div class="page-subtitle">{{ history_label }} &mdash; {{ date_from }} to {{ date_to }}</div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 24px;">
+    <div style="overflow-x: auto; border-radius: 12px;">
+        <table class="entries-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th style="text-align: right;">Amount (PKR)</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr>
+                    <td>{{ entry['date']|monthday }}</td>
+                    <td>
+                        <span class="cat-pill cat-{{ entry['category'] }}">
+                            {{ category_labels.get(entry['category'], entry['category']|title) }}
+                        </span>
+                    </td>
+                    <td style="text-align: right;">
+                        <span class="mono expense">{{ entry['amount']|pkr }}</span>
+                    </td>
+                    <td><span class="notes-text" title="{{ entry['notes'] }}">{{ entry['notes'] }}</span></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center; color: var(--text3);">No entries found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="border-top: 2px solid var(--border2);">
+                    <td colspan="2"><strong>Total</strong></td>
+                    <td style="text-align: right;">
+                        <strong class="mono expense">{{ total|pkr }}</strong>
+                    </td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<div class="form-actions" style="margin-top: 24px;">
+    <a href="{{ url_for('reports', **{'from': date_from, 'to': date_to}) }}" class="btn btn-cancel">
+        &larr; Back to Reports
+    </a>
+</div>
+{% endblock %}

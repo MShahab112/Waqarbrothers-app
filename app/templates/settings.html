@@ -68,6 +68,79 @@ endblock %} {% block content %}
   </div>
 
   <div class="settings-extra">
+    <h2>☁️ Cloud Backup (Google Drive / OneDrive)</h2>
+    <p class="hint" style="margin-bottom: 12px">
+      When a folder is set here, every manual backup and every Day Close will
+      <strong>also</strong> be copied there in addition to the normal local
+      download. Install
+      <a
+        href="https://www.google.com/drive/download/"
+        target="_blank"
+        rel="noopener"
+        >Google Drive for Desktop</a
+      >
+      (or OneDrive) first, then paste the synced folder path below — e.g.
+      <code>G:\My Drive\WaqarBrothers-Backups</code>. The app never talks to
+      Google or Microsoft; it just writes files there and the sync client
+      uploads them.
+    </p>
+    <form
+      method="POST"
+      action="{{ url_for('settings_cloud_backup') }}"
+      autocomplete="off"
+    >
+      <div class="form-group">
+        <label for="cloud_backup_folder">Cloud Backup Folder</label>
+        <input
+          type="text"
+          id="cloud_backup_folder"
+          name="cloud_backup_folder"
+          value="{{ cloud_backup_folder or '' }}"
+          placeholder="G:\My Drive\WaqarBrothers-Backups"
+        />
+        <p class="hint" style="margin-top: 6px">
+          Leave empty to disable cloud backup. Local downloads always work.
+        </p>
+      </div>
+      <div class="form-actions" style="gap: 8px">
+        <button
+          type="submit"
+          name="action"
+          value="test"
+          class="btn btn-cancel"
+        >
+          Test
+        </button>
+        <button
+          type="submit"
+          name="action"
+          value="save"
+          class="btn btn-primary"
+        >
+          Save Folder
+        </button>
+      </div>
+    </form>
+    {% if cloud_backup_folder %}
+    <p class="hint" style="margin-top: 12px">
+      Last cloud copy:
+      {% if cloud_backup_time %}
+      <strong>{{ cloud_backup_time }}</strong>
+      {% else %} <em>not yet attempted</em> {% endif %}
+      {% if cloud_backup_status %}
+      <br />Status:
+      <strong
+        style="color: {% if cloud_backup_status == 'success' %}var(--green, #2ecc71){% else %}var(--red, #e74c3c){% endif %}"
+        >{{ cloud_backup_status }}</strong
+      >
+      {% endif %} {% if cloud_backup_path %}
+      <br />File: <code>{{ cloud_backup_path }}</code>
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="settings-extra">
     <h2>📂 Restore Backup</h2>
     <p class="hint" style="margin-bottom: 12px">
       Upload a previously downloaded <code>.db</code> backup file to replace all

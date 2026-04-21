@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "C:\WaqarBrothers\app\app.py", line 431, in init_db
-    run_migrations(conn)
-    ~~~~~~~~~~~~~~^^^^^^
-  File "C:\WaqarBrothers\app\app.py", line 352, in run_migrations
-    raw = get_setting(db, 'db_version') or '0'
-          ^^^^^^^^^^^
-NameError: name 'get_setting' is not defined

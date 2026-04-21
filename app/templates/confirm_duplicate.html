@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Confirm Duplicate — {{ business_name }}{% endblock %}
+
+{% block content %}
+<div class="form-box" style="max-width: 640px;">
+    <div class="flash flash-warning" style="margin-bottom: 16px;">
+        &#9888; Possible duplicate entry found for
+        <strong>{{ entry_date }}</strong>.
+        A {{ entry_type }} entry with the same description and amount already exists.
+        Review below, then choose Cancel or Save Anyway.
+    </div>
+
+    <h1 style="margin-bottom: 8px;">Duplicate Entry Check</h1>
+
+    <div class="card" style="padding: 16px; margin-bottom: 16px;">
+        <div class="section-title" style="margin-bottom: 10px;">You are about to save</div>
+        <div class="summary-row">
+            <span class="summary-label">Date</span>
+            <span class="summary-amount mono">{{ entry_date }}</span>
+        </div>
+        <div class="summary-row">
+            <span class="summary-label">Type</span>
+            <span class="summary-amount">{{ entry_type|capitalize }}</span>
+        </div>
+        {% if category_label %}
+        <div class="summary-row">
+            <span class="summary-label">Category</span>
+            <span class="summary-amount">{{ category_label }}</span>
+        </div>
+        {% endif %}
+        <div class="summary-row">
+            <span class="summary-label">Description</span>
+            <span class="summary-amount">{{ description }}</span>
+        </div>
+        <div class="summary-row">
+            <span class="summary-label">Amount</span>
+            <span class="summary-amount mono">{{ amount|pkr }}</span>
+        </div>
+
+        {% if notes %}
+        <div class="summary-row">
+            <span class="summary-label">Notes</span>
+            <span class="summary-amount">{{ notes }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card" style="padding: 16px; margin-bottom: 20px;">
+        <div class="section-title" style="margin-bottom: 10px;">
+            Existing match{{ 'es' if existing|length > 1 else '' }} ({{ existing|length }})
+        </div>
+        {% for e in existing %}
+        <div class="summary-row">
+            <span class="summary-label">
+                #{{ e.id }} &middot; {{ e.description }}
+                {% if e.notes %}<span style="color: var(--muted, #888); font-size: 12px;"> — {{ e.notes }}</span>{% endif %}
+            </span>
+            <span class="summary-amount mono">{{ e.amount|pkr }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <form method="POST" action="{{ url_for('add_entry') }}">
+        <input type="hidden" name="confirm_duplicate" value="1">
+        <input type="hidden" name="type" value="{{ entry_type }}">
+        <input type="hidden" name="date" value="{{ entry_date }}">
+        <input type="hidden" name="description" value="{{ description }}">
+        <input type="hidden" name="amount" value="{{ amount }}">
+        <input type="hidden" name="notes" value="{{ notes or '' }}">
+
+        {% if category %}<input type="hidden" name="category" value="{{ category }}">{% endif %}
+        {% if salesman_id %}<input type="hidden" name="salesman_id" value="{{ salesman_id }}">{% endif %}
+        {% if receipt_filename %}<input type="hidden" name="receipt_filename" value="{{ receipt_filename }}">{% endif %}
+
+        <div class="form-actions">
+            <a href="{{ url_for('daily', date=entry_date) }}" class="btn btn-cancel">Cancel</a>
+            <button type="submit" class="btn btn-primary">Save Anyway</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -53,27 +53,20 @@ if errorlevel 1 (
 echo Flask installed.
 echo.
 
-REM --- Step 3: Create folders if they don't exist ---
+REM --- Step 3: Ensure data and logs folders exist ---
+REM The database itself is created on first app run by init_db() in app.py,
+REM so we only provision the directories here. Do NOT create accounts.db.
 if not exist "C:\WaqarBrothers\data" mkdir "C:\WaqarBrothers\data"
 if not exist "C:\WaqarBrothers\logs" mkdir "C:\WaqarBrothers\logs"
+echo Data and logs folders ready.
+echo.
 
 REM --- Step 4: Generate SECRET_KEY and save to config.py ---
 echo Generating secret key...
 python -c "import os; key = os.urandom(24).hex(); f = open(r'C:\WaqarBrothers\app\config.py', 'w'); f.write('SECRET_KEY = \"' + key + '\"\n'); f.close(); print('Secret key saved to config.py')"
 echo.
 
-REM --- Step 5: Create the database ---
-echo Setting up the database...
-cd /d "C:\WaqarBrothers\app"
-python setup_db.py
-if errorlevel 1 (
-    echo ERROR: Database setup failed.
-    pause
-    exit /b 1
-)
-echo.
-
-REM --- Step 6: Create desktop shortcut ---
+REM --- Step 5: Create desktop shortcut ---
 echo Creating desktop shortcut...
 (
     echo [InternetShortcut]
@@ -83,7 +76,7 @@ echo Creating desktop shortcut...
 echo Desktop shortcut created.
 echo.
 
-REM --- Step 7: Register auto-start with Task Scheduler ---
+REM --- Step 6: Register auto-start with Task Scheduler ---
 echo Setting up auto-start...
 schtasks /create /tn "WaqarBrothersApp" /tr "C:\WaqarBrothers\start.bat" /sc onlogon /rl highest /f >nul 2>&1
 if errorlevel 1 (
@@ -101,6 +94,9 @@ echo.
 echo   To open the app:
 echo     - Double-click the "Waqar Brothers" shortcut on your Desktop
 echo     - Or double-click start.bat in C:\WaqarBrothers\
+echo.
+echo   Data location:  C:\WaqarBrothers\data\accounts.db
+echo   Log location:   C:\WaqarBrothers\logs\app.log
 echo.
 echo   Default login:
 echo     Username: admin
